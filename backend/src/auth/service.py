@@ -47,8 +47,15 @@ def register_user(session: Session, payload: SignupRequest) -> User:
     existing_user = _get_user_by_email(session, payload.email)
     if existing_user is not None:
         raise _auth_exception(status_code=status.HTTP_400_BAD_REQUEST, detail="A user with this email already exists.")
+    clean_name = payload.name.strip()
+    if not clean_name:
+        raise _auth_exception(status_code=status.HTTP_400_BAD_REQUEST, detail="Name cannot be empty.")
     
-    user = User(email=str(payload.email).lower(), password_hash=hash_password(payload.password))
+    user = User(
+        email=str(payload.email).lower(),
+        password_hash=hash_password(payload.password),
+        name=clean_name,
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -56,7 +63,7 @@ def register_user(session: Session, payload: SignupRequest) -> User:
 
 def login_user(session: Session, payload: LoginRequest) -> TokenPair:
     user = _get_user_by_email(session, str(payload.email))
-    if user is None or not verify_password(payload.password, user.hashed_password):
+    if user is None or not verify_password(payload.password, user.password_hash):
         raise _auth_exception("Invalid email or password.")
     
     if not user.is_active:
@@ -66,7 +73,7 @@ def login_user(session: Session, payload: LoginRequest) -> TokenPair:
         )
     return _issue_token_pair(session, user)
 
-def refresh_user_tokens(session: Session, payload: RefreshToken) -> TokenPair:
+def refresh_user_tokens(session: Session, payload: RefreshRequest) -> TokenPair:
     token_payload = _decode_token_or_raise(payload.refresh_token)
     
     if token_payload.get("type") != REFRESH_TOKEN_TYPE:
@@ -129,7 +136,7 @@ def revoke_refresh_token(session: Session, current_user: User, payload: RefreshR
     if refresh_record.token_hash != hash_refresh_token(payload.refresh_token):
         raise _auth_exception("Token is invalid.")
     
-    if refresh_record.revoked_at is not None:
+    if refresh_record.revoked_at is None:
         refresh_record.revoked_at = utc_now()
         session.add(refresh_record)
         session.commit()

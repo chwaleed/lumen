@@ -10,7 +10,7 @@ class User(SQLModel, table=True):
     
     email: str = Field(sa_column=Column(String(320), unique=True, nullable=False))
     
-    hashed_password: str = Field(sa_column=Column(String(255), nullable=False))
+    password_hash: str = Field(sa_column=Column(String(255), nullable=False))
     
     name: str = Field(sa_column=Column(String(350), nullable=False))
     

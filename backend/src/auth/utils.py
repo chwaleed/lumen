@@ -1,5 +1,5 @@
 import hashlib
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import bcrypt
@@ -41,7 +41,7 @@ def create_access_token(user_id: int, settings: Settings | None = None) -> tuple
     return _encode_token(payload, settings), int(expires_delta.total_seconds())
 
 
-def create_refresh_token(user_id: int, settings: Settings | None = None)-> tuple[str, int]:
+def create_refresh_token(user_id: int, settings: Settings | None = None)-> tuple[str, str, datetime]:
     settings = settings or get_settings()
     expires_at = utc_now() + timedelta(days=settings.refresh_token_expire_days)
     jti = uuid4().hex

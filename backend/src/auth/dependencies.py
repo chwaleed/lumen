@@ -25,8 +25,8 @@ def get_current_user(token: str = Depends(get_bearer_token), session: Session = 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=exc.detail,
-            detail=exc.detail, headers={"WWW-Authenticate": "Bearer"}
-            ) from exc
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
         
     if payload.get("type") != ACCESS_TOKEN_TYPE:
         raise HTTPException(
