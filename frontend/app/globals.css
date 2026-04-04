@@ -128,3 +128,7 @@
     @apply font-sans;
   }
 }
+
+.context-view.monaco-component {
+  display: none !important;
+}

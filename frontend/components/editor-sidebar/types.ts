@@ -1,15 +1,9 @@
-export type SidebarTab = "files" | "search" | "ai";
+export type SidebarTab = "files" | "ai";
 
 export type SidebarProps = {
   activeSidebarTab: SidebarTab | string;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
-  replaceQuery: string;
-  setReplaceQuery: (query: string) => void;
-  handleFindNext: () => void;
-  handleReplaceAll: () => void;
   onOpenFile: (fileId: string, fileName: string) => void;
   onCreateFile: (fileId: string, fileName: string) => void;
   onRenameFile: (fileId: string, fileName: string) => void;

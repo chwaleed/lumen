@@ -1,4 +1,4 @@
-import { Folder, Search, Sparkles } from "lucide-react";
+import { Folder, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SidebarTab } from "@/app/project/[id]/use-project-editor-hook";
 
@@ -26,15 +26,6 @@ export function ActivityBar({ activeSidebarTab, sidebarOpen, setActiveSidebarTab
         onClick={() => handleTabClick("files")}
       >
         <Folder className="size-5" />
-      </Button>
-
-      <Button
-        variant={activeSidebarTab === "search" && sidebarOpen ? "secondary" : "ghost"}
-        size="icon"
-        className="rounded-xl"
-        onClick={() => handleTabClick("search")}
-      >
-        <Search className="size-5" />
       </Button>
 
       <Button

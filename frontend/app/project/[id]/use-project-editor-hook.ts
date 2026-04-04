@@ -1,8 +1,9 @@
 "use client";
 
+import type { editor as MonacoEditor } from "monaco-editor";
 import { create } from "zustand";
 
-export type SidebarTab = "files" | "search" | "ai";
+export type SidebarTab = "files" | "ai";
 
 export type EditorFile = {
   id: string;
@@ -14,11 +15,11 @@ type ProjectEditorState = {
   sidebarOpen: boolean;
   editorOpen: boolean;
   previewOpen: boolean;
+  wordWrap: boolean;
+  editorInstance: MonacoEditor.IStandaloneCodeEditor | null;
   openFiles: EditorFile[];
   activeFileId: string | null;
   fileContents: Record<string, string>;
-  searchQuery: string;
-  replaceQuery: string;
   isAiChatExpanded: boolean;
   aiChatPrompt: string;
   aiChatHistory: string[];
@@ -26,19 +27,25 @@ type ProjectEditorState = {
   setSidebarOpen: (open: boolean) => void;
   setEditorOpen: (open: boolean) => void;
   setPreviewOpen: (open: boolean) => void;
-  setSearchQuery: (value: string) => void;
-  setReplaceQuery: (value: string) => void;
+  toggleWordWrap: () => void;
+  setEditorInstance: (editor: MonacoEditor.IStandaloneCodeEditor | null) => void;
   setAiChatExpanded: (expanded: boolean) => void;
   setAiChatPrompt: (value: string) => void;
   submitAiChatPrompt: () => void;
   initializeForViewport: (isMobile: boolean) => void;
   openFile: (fileId: string, fileName: string) => void;
   createFile: (fileId: string, fileName: string) => void;
+  createUntitledFile: () => void;
   renameFile: (fileId: string, fileName: string) => void;
   deleteFile: (fileId: string) => void;
   closeFile: (fileId: string) => void;
   setActiveFile: (fileId: string) => void;
   setActiveFileContent: (value: string) => void;
+  saveActiveFile: () => void;
+  cutSelection: () => Promise<void>;
+  copySelection: () => Promise<void>;
+  pasteSelection: () => Promise<void>;
+  insertSnippet: (textToInsert: string) => void;
 };
 
 const DEFAULT_LATEX = `\\documentclass{article}
@@ -85,9 +92,8 @@ const DEFAULT_FILE_CONTENTS: Record<string, string> = {
 function withFile(state: ProjectEditorState, fileId: string, fileName: string) {
   const hasOpenTab = state.openFiles.some((file) => file.id === fileId);
   const openFiles = hasOpenTab ? state.openFiles : [...state.openFiles, { id: fileId, name: fileName }];
-  const fileContents = state.fileContents[fileId]
-    ? state.fileContents
-    : { ...state.fileContents, [fileId]: "" };
+  const hasContent = Object.prototype.hasOwnProperty.call(state.fileContents, fileId);
+  const fileContents = hasContent ? state.fileContents : { ...state.fileContents, [fileId]: "" };
 
   return {
     openFiles,
@@ -96,16 +102,16 @@ function withFile(state: ProjectEditorState, fileId: string, fileName: string) {
   };
 }
 
-export const useProjectEditorHook = create<ProjectEditorState>()((set) => ({
+export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => ({
   activeSidebarTab: "files",
   sidebarOpen: true,
   editorOpen: true,
   previewOpen: true,
+  wordWrap: true,
+  editorInstance: null,
   openFiles: DEFAULT_OPEN_FILES,
   activeFileId: "1",
   fileContents: DEFAULT_FILE_CONTENTS,
-  searchQuery: "",
-  replaceQuery: "",
   isAiChatExpanded: false,
   aiChatPrompt: "",
   aiChatHistory: [],
@@ -125,8 +131,8 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set) => ({
       }
       return { previewOpen: open };
     }),
-  setSearchQuery: (value) => set({ searchQuery: value }),
-  setReplaceQuery: (value) => set({ replaceQuery: value }),
+  toggleWordWrap: () => set((state) => ({ wordWrap: !state.wordWrap })),
+  setEditorInstance: (editor) => set({ editorInstance: editor }),
   setAiChatExpanded: (expanded) => set({ isAiChatExpanded: expanded }),
   setAiChatPrompt: (value) => set({ aiChatPrompt: value }),
   submitAiChatPrompt: () =>
@@ -152,6 +158,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set) => ({
     }),
   openFile: (fileId, fileName) => set((state) => withFile(state, fileId, fileName)),
   createFile: (fileId, fileName) => set((state) => withFile(state, fileId, fileName)),
+  createUntitledFile: () => {
+    const id = `file-${Date.now()}`;
+    set((state) => withFile(state, id, "new_file.tex"));
+  },
   renameFile: (fileId, fileName) =>
     set((state) => ({
       openFiles: state.openFiles.map((file) => (file.id === fileId ? { ...file, name: fileName } : file)),
@@ -211,4 +221,75 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set) => ({
         },
       };
     }),
+  saveActiveFile: () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const { activeFileId, openFiles, fileContents } = get();
+    if (!activeFileId) {
+      return;
+    }
+
+    const activeFile = openFiles.find((file) => file.id === activeFileId);
+    if (!activeFile) {
+      return;
+    }
+
+    const content = fileContents[activeFileId] ?? "";
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = activeFile.name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  },
+  cutSelection: async () => {
+    const editor = get().editorInstance;
+    if (!editor) {
+      return;
+    }
+    await editor.getAction("editor.action.clipboardCutAction")?.run();
+  },
+  copySelection: async () => {
+    const editor = get().editorInstance;
+    if (!editor) {
+      return;
+    }
+    await editor.getAction("editor.action.clipboardCopyAction")?.run();
+  },
+  pasteSelection: async () => {
+    const editor = get().editorInstance;
+    if (!editor) {
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      get().insertSnippet(text);
+    } catch {
+      await editor.getAction("editor.action.clipboardPasteAction")?.run();
+    }
+  },
+  insertSnippet: (textToInsert) => {
+    const editor = get().editorInstance;
+    if (!editor) {
+      return;
+    }
+
+    const selection = editor.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    editor.executeEdits("insert-snippet", [
+      {
+        range: selection,
+        text: textToInsert,
+        forceMoveMarkers: true,
+      },
+    ]);
+    editor.focus();
+  },
 }));

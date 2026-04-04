@@ -2,51 +2,40 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Editor from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, Eye, History, PanelLeftOpen, RefreshCw, Search, Sparkles, Wand2, X } from "lucide-react";
+import { PanelLeftOpen } from "lucide-react";
 import { EditorSidebar } from "@/components/editor-sidebar";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { ActivityBar } from "@/app/project/[id]/components/activity-bar";
 import { EditorTopBar } from "@/app/project/[id]/components/editor-top-bar";
 import { PreviewPanel } from "@/app/project/[id]/components/preview-panel";
 import { StatusBar } from "@/app/project/[id]/components/status-bar";
-import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
+import { EditorFileTabs } from "@/app/project/[id]/components/editor-file-tabs";
+import { FloatingAiChat } from "@/app/project/[id]/components/floating-ai-chat";
+import { MonacoLatexEditor } from "@/app/project/[id]/components/monaco-latex-editor";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  SelectionActionPopup,
+  type SelectionPopupState,
+} from "@/app/project/[id]/components/selection-action-popup";
+import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 
 export function EditorWorkspace() {
   const router = useRouter();
   const theme = useThemeStore((state) => state.theme);
-  const setTheme = useThemeStore((state) => state.setTheme);
 
   const activeSidebarTab = useProjectEditorHook((state) => state.activeSidebarTab);
   const sidebarOpen = useProjectEditorHook((state) => state.sidebarOpen);
   const editorOpen = useProjectEditorHook((state) => state.editorOpen);
   const previewOpen = useProjectEditorHook((state) => state.previewOpen);
-  const latexCode = useProjectEditorHook((state) => state.latexCode);
-  const searchQuery = useProjectEditorHook((state) => state.searchQuery);
-  const replaceQuery = useProjectEditorHook((state) => state.replaceQuery);
+  const openFiles = useProjectEditorHook((state) => state.openFiles);
+  const activeFileId = useProjectEditorHook((state) => state.activeFileId);
+  const fileContents = useProjectEditorHook((state) => state.fileContents);
   const setActiveSidebarTab = useProjectEditorHook((state) => state.setActiveSidebarTab);
   const setSidebarOpen = useProjectEditorHook((state) => state.setSidebarOpen);
-  const setEditorOpen = useProjectEditorHook((state) => state.setEditorOpen);
-  const setPreviewOpen = useProjectEditorHook((state) => state.setPreviewOpen);
-  const setLatexCode = useProjectEditorHook((state) => state.setLatexCode);
-  const setSearchQuery = useProjectEditorHook((state) => state.setSearchQuery);
-  const setReplaceQuery = useProjectEditorHook((state) => state.setReplaceQuery);
+  const setEditorInstance = useProjectEditorHook((state) => state.setEditorInstance);
+  const wordWrap = useProjectEditorHook((state) => state.wordWrap);
   const isAiChatExpanded = useProjectEditorHook((state) => state.isAiChatExpanded);
   const aiChatPrompt = useProjectEditorHook((state) => state.aiChatPrompt);
   const aiChatHistory = useProjectEditorHook((state) => state.aiChatHistory);
@@ -54,17 +43,29 @@ export function EditorWorkspace() {
   const setAiChatPrompt = useProjectEditorHook((state) => state.setAiChatPrompt);
   const submitAiChatPrompt = useProjectEditorHook((state) => state.submitAiChatPrompt);
   const initializeForViewport = useProjectEditorHook((state) => state.initializeForViewport);
+  const openFile = useProjectEditorHook((state) => state.openFile);
+  const createFile = useProjectEditorHook((state) => state.createFile);
+  const renameFile = useProjectEditorHook((state) => state.renameFile);
+  const deleteFile = useProjectEditorHook((state) => state.deleteFile);
+  const closeFile = useProjectEditorHook((state) => state.closeFile);
+  const setActiveFile = useProjectEditorHook((state) => state.setActiveFile);
+  const setActiveFileContent = useProjectEditorHook((state) => state.setActiveFileContent);
 
   const [isMobile, setIsMobile] = useState(false);
-  const [selectionPopup, setSelectionPopup] = useState({
+  const [panelContainerWidth, setPanelContainerWidth] = useState(0);
+  const [selectionPopup, setSelectionPopup] = useState<SelectionPopupState>({
     show: false,
     x: 0,
     y: 0,
     text: "",
   });
   const [selectionPrompt, setSelectionPrompt] = useState("");
+
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const panelContainerRef = useRef<HTMLDivElement | null>(null);
+  const findWidgetObserverRef = useRef<MutationObserver | null>(null);
   const isPointerSelectingRef = useRef(false);
+  const isContentSelectionRef = useRef(false);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 768px)");
@@ -82,49 +83,79 @@ export function EditorWorkspace() {
     };
   }, [initializeForViewport]);
 
+  useEffect(() => {
+    const element = panelContainerRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const [entry] = entries;
+      if (!entry) {
+        return;
+      }
+      setPanelContainerWidth(entry.contentRect.width);
+    });
+
+    observer.observe(element);
+    setPanelContainerWidth(element.getBoundingClientRect().width);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setEditorInstance(null);
+      findWidgetObserverRef.current?.disconnect();
+      findWidgetObserverRef.current = null;
+    };
+  }, [setEditorInstance]);
+
+  const activeFile = useMemo(() => openFiles.find((file) => file.id === activeFileId) ?? null, [activeFileId, openFiles]);
+  const activeFileContent = activeFileId ? fileContents[activeFileId] ?? "" : "";
+
   const isDarkMode = theme === "dark";
-
-  const handleFindNext = () => {
-    if (!searchQuery || !editorRef.current) {
-      return;
-    }
-
-    const editor = editorRef.current;
-    const model = editor.getModel();
-    if (!model) {
-      return;
-    }
-
-    const currentPosition = editor.getPosition() ?? model.getFullModelRange().getStartPosition();
-    const match = model.findNextMatch(searchQuery, currentPosition, false, false, null, false);
-    if (!match) {
-      return;
-    }
-
-    editor.setSelection(match.range);
-    editor.revealRangeInCenter(match.range);
-    editor.focus();
-  };
-
-  const handleReplaceAll = () => {
-    if (!searchQuery) {
-      return;
-    }
-
-    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(escapedQuery, "g");
-    setLatexCode(latexCode.replace(pattern, replaceQuery));
-  };
-
   const previewSize = useMemo(() => (sidebarOpen ? 40 : 50), [sidebarOpen]);
+  const panelMinWidths = useMemo(() => {
+    if (panelContainerWidth >= 1400) {
+      return { editor: 480, preview: 450 };
+    }
+    if (panelContainerWidth >= 1200) {
+      return { editor: 440, preview: 410 };
+    }
+    if (panelContainerWidth >= 1024) {
+      return { editor: 400, preview: 360 };
+    }
+    return { editor: 340, preview: 300 };
+  }, [panelContainerWidth]);
+  const panelMaxWidths = useMemo(() => {
+    if (panelContainerWidth <= 0) {
+      return {
+        editor: undefined,
+        preview: undefined,
+      } as const;
+    }
+
+    return {
+      editor: Math.max(panelMinWidths.editor, panelContainerWidth - panelMinWidths.preview),
+      preview: Math.max(panelMinWidths.preview, panelContainerWidth - panelMinWidths.editor),
+    } as const;
+  }, [panelContainerWidth, panelMinWidths.editor, panelMinWidths.preview]);
+
   const SELECTION_POPUP_WIDTH = 256;
   const SELECTION_POPUP_HEIGHT = 150;
   const VIEWPORT_MARGIN = 8;
 
+  const clearSelectionPopup = () => {
+    setSelectionPopup((prev) => ({ ...prev, show: false }));
+  };
+
   const showSelectionPopup = (editor: MonacoEditor.IStandaloneCodeEditor) => {
     const selection = editor.getSelection();
     if (!selection || selection.isEmpty()) {
-      setSelectionPopup((prev) => ({ ...prev, show: false }));
+      clearSelectionPopup();
       return;
     }
 
@@ -133,13 +164,14 @@ export function EditorWorkspace() {
     const domNode = editor.getDomNode();
 
     if (!position || !domNode || !selectedText.trim()) {
-      setSelectionPopup((prev) => ({ ...prev, show: false }));
+      clearSelectionPopup();
       return;
     }
 
     const rect = domNode.getBoundingClientRect();
     const anchorX = rect.left + position.left;
     const anchorY = rect.top + position.top;
+    const editorSafeTop = rect.top + 56;
 
     const left = Math.min(
       Math.max(anchorX, VIEWPORT_MARGIN),
@@ -148,17 +180,66 @@ export function EditorWorkspace() {
 
     const topAbove = anchorY - SELECTION_POPUP_HEIGHT - VIEWPORT_MARGIN;
     const topBelow = anchorY + VIEWPORT_MARGIN;
-    const top = topAbove >= VIEWPORT_MARGIN ? topAbove : topBelow;
+    const top = topAbove >= editorSafeTop ? topAbove : topBelow;
     const clampedTop = Math.min(
-      Math.max(top, VIEWPORT_MARGIN),
+      Math.max(top, editorSafeTop),
       window.innerHeight - SELECTION_POPUP_HEIGHT - VIEWPORT_MARGIN,
     );
 
-    setSelectionPopup({
-      show: true,
-      x: left,
-      y: clampedTop,
-      text: selectedText,
+    setSelectionPopup({ show: true, x: left, y: clampedTop, text: selectedText });
+  };
+
+  const handleEditorMount = (editor: MonacoEditor.IStandaloneCodeEditor) => {
+    editorRef.current = editor;
+    setEditorInstance(editor);
+
+    const stripFindWidgetTooltips = () => {
+      document
+        .querySelectorAll(
+          ".monaco-editor .find-widget [title], .monaco-editor .find-widget [data-title], .monaco-editor .find-widget [data-tooltip], .monaco-editor .find-widget [aria-label]",
+        )
+        .forEach((element) => {
+          element.removeAttribute("title");
+          element.removeAttribute("data-title");
+          element.removeAttribute("data-tooltip");
+          element.removeAttribute("aria-label");
+        });
+    };
+
+    stripFindWidgetTooltips();
+    findWidgetObserverRef.current?.disconnect();
+    const observer = new MutationObserver(() => {
+      stripFindWidgetTooltips();
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["title", "data-title", "data-tooltip", "aria-label"],
+    });
+    findWidgetObserverRef.current = observer;
+
+    editor.onMouseDown((event) => {
+      // Monaco overlay widgets (find/replace, context menus, etc.) should not trigger AI selection popup.
+      const targetType = event.target.type as number;
+      const isContentTarget = targetType === 6 || targetType === 7; // CONTENT_TEXT or CONTENT_EMPTY
+      isPointerSelectingRef.current = isContentTarget;
+      isContentSelectionRef.current = isContentTarget;
+      if (isContentTarget) {
+        clearSelectionPopup();
+      }
+    });
+
+    editor.onMouseUp(() => {
+      if (!isPointerSelectingRef.current || !isContentSelectionRef.current) {
+        isPointerSelectingRef.current = false;
+        isContentSelectionRef.current = false;
+        return;
+      }
+
+      isPointerSelectingRef.current = false;
+      isContentSelectionRef.current = false;
+      showSelectionPopup(editor);
     });
   };
 
@@ -173,9 +254,10 @@ export function EditorWorkspace() {
         : action === "Rewrite"
           ? "Rewrite this selection:\n"
           : "Improve this selection:\n";
+
     setAiChatPrompt(`${prefix}${selectionPopup.text}`);
     setAiChatExpanded(true);
-    setSelectionPopup((prev) => ({ ...prev, show: false }));
+    clearSelectionPopup();
   };
 
   const handleSelectionPromptSubmit = () => {
@@ -191,21 +273,12 @@ export function EditorWorkspace() {
     setAiChatPrompt(`${prompt}\n\nSelected text:\n${selectionPopup.text}`);
     setAiChatExpanded(true);
     setSelectionPrompt("");
-    setSelectionPopup((prev) => ({ ...prev, show: false }));
+    clearSelectionPopup();
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <EditorTopBar
-        isDarkMode={isDarkMode}
-        toggleTheme={() => setTheme(isDarkMode ? "light" : "dark")}
-        sidebarOpen={sidebarOpen}
-        editorOpen={editorOpen}
-        previewOpen={previewOpen}
-        setSidebarOpen={setSidebarOpen}
-        setEditorOpen={setEditorOpen}
-        setPreviewOpen={setPreviewOpen}
-      />
+    <div className="flex h-dvh overflow-hidden flex-col bg-background text-foreground">
+      <EditorTopBar />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ActivityBar
@@ -223,244 +296,95 @@ export function EditorWorkspace() {
           activeSidebarTab={activeSidebarTab}
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          replaceQuery={replaceQuery}
-          setReplaceQuery={setReplaceQuery}
-          handleFindNext={handleFindNext}
-          handleReplaceAll={handleReplaceAll}
+          onOpenFile={(fileId, fileName) => {
+            clearSelectionPopup();
+            openFile(fileId, fileName);
+          }}
+          onCreateFile={(fileId, fileName) => {
+            clearSelectionPopup();
+            createFile(fileId, fileName);
+          }}
+          onRenameFile={renameFile}
+          onDeleteFile={(fileId) => {
+            clearSelectionPopup();
+            deleteFile(fileId);
+          }}
         />
 
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <ResizablePanelGroup orientation={isMobile ? "vertical" : "horizontal"} className="h-full w-full">
+        <div ref={panelContainerRef} className="min-w-0 flex-1 overflow-hidden">
+          <ResizablePanelGroup direction={isMobile ? "vertical" : "horizontal"} className="h-full w-full">
             {editorOpen ? (
-              <ResizablePanel defaultSize={previewOpen ? 60 : 100} minSize={30}>
-                <div className="relative flex h-full flex-col bg-background">
-                  <div className="flex items-center justify-between border-b bg-muted/20 px-3 py-2">
-                    <div className="inline-flex items-center gap-2 text-sm font-medium">
+              <ResizablePanel
+                defaultSize={previewOpen ? 60 : 100}
+                minSize={!isMobile && previewOpen ? panelMinWidths.editor : 20}
+                maxSize={!isMobile && previewOpen ? panelMaxWidths.editor : undefined}
+              >
+                <div className="relative flex h-full min-h-0 flex-col bg-background">
+                  <div className="flex items-center border-b bg-muted/20 overflow-x-auto">
+                    <div className="flex min-w-0 flex-1 items-center">
                       {!sidebarOpen ? (
-                        <Button variant="ghost" size="icon" className="size-7" onClick={() => setSidebarOpen(true)}>
+                        <Button variant="ghost" size="icon" className="ml-2 size-8 shrink-0" onClick={() => setSidebarOpen(true)}>
                           <PanelLeftOpen className="size-4" />
                         </Button>
                       ) : null}
-                      <span>main.tex</span>
+
+                      <EditorFileTabs
+                        files={openFiles}
+                        activeFileId={activeFileId}
+                        onSelectFile={(fileId) => {
+                          clearSelectionPopup();
+                          setActiveFile(fileId);
+                        }}
+                        onCloseFile={(fileId) => {
+                          clearSelectionPopup();
+                          closeFile(fileId);
+                        }}
+                      />
+
+                      <div className="min-w-[20px] flex-1" />
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="size-7" onClick={handleFindNext}>
-                        <Search className="size-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")}>
+
+                    <div className="shrink-0 px-4">
+                      <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => router.push("/dashboard")}>
                         Back
                       </Button>
                     </div>
                   </div>
-                  <Editor
-                    height="100%"
-                    language="latex"
-                    theme={isDarkMode ? "vs-dark" : "light"}
-                    value={latexCode}
-                    beforeMount={(monaco) => {
-                      if (!monaco.languages.getLanguages().some((lang: { id: string }) => lang.id === "latex")) {
-                        monaco.languages.register({ id: "latex" });
-                      }
 
-                      monaco.languages.setMonarchTokensProvider("latex", {
-                        tokenizer: {
-                          root: [
-                            [/\\begin\{[a-zA-Z0-9*]+\}/, "keyword.control.latex"],
-                            [/\\end\{[a-zA-Z0-9*]+\}/, "keyword.control.latex"],
-                            [/\\[a-zA-Z@]+/, "keyword.control.latex"],
-                            [/%.*$/, "comment.line.percentage"],
-                            [/\{|\}/, "delimiter.curly"],
-                            [/\[|\]/, "delimiter.square"],
-                            [/\$[^$]*\$/, "string.other.math.block"],
-                            [/\\\[/, "string.other.math.block"],
-                            [/\\\]/, "string.other.math.block"],
-                          ],
-                        },
-                      });
+                  {activeFile ? (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <MonacoLatexEditor
+                        value={activeFileContent}
+                        isDarkMode={isDarkMode}
+                        wordWrap={wordWrap}
+                        onMount={handleEditorMount}
+                        onChange={setActiveFileContent}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+                      No file open. Select a file from the sidebar.
+                    </div>
+                  )}
 
-                      monaco.languages.setLanguageConfiguration("latex", {
-                        comments: { lineComment: "%" },
-                        brackets: [
-                          ["{", "}"],
-                          ["[", "]"],
-                          ["(", ")"],
-                        ],
-                        autoClosingPairs: [
-                          { open: "{", close: "}" },
-                          { open: "[", close: "]" },
-                          { open: "(", close: ")" },
-                          { open: "$", close: "$" },
-                        ],
-                      });
-                    }}
-                    onMount={(editor) => {
-                      editorRef.current = editor;
-
-                      editor.onMouseDown(() => {
-                        isPointerSelectingRef.current = true;
-                        setSelectionPopup((prev) => ({ ...prev, show: false }));
-                      });
-
-                      editor.onMouseUp(() => {
-                        isPointerSelectingRef.current = false;
-                        showSelectionPopup(editor);
-                      });
-
-                      editor.onDidChangeCursorSelection(() => {
-                        if (isPointerSelectingRef.current) {
-                          return;
-                        }
-                        showSelectionPopup(editor);
-                      });
-                    }}
-                    onChange={(value) => setLatexCode(value ?? "")}
-                    options={{
-                      wordWrap: "on",
-                      fontSize: 14,
-                      tabSize: 2,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      lineNumbers: "on",
-                      renderLineHighlight: "all",
-                    }}
+                  <SelectionActionPopup
+                    popup={selectionPopup}
+                    prompt={selectionPrompt}
+                    setPrompt={setSelectionPrompt}
+                    onSubmitPrompt={handleSelectionPromptSubmit}
+                    onSelectAction={handleSelectionAction}
                   />
 
-                  {selectionPopup.show ? (
-                    <div
-                      className="fixed z-30 w-64 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-xl"
-                      style={{
-                        top: selectionPopup.y,
-                        left: selectionPopup.x,
-                      }}
-                    >
-                      <div className="border-b border-border/50 bg-muted/30 p-2">
-                        <div className="relative flex items-center">
-                          <input
-                            type="text"
-                            placeholder="Enter prompt"
-                            className="h-8 w-full bg-transparent pr-8 text-sm outline-none"
-                            value={selectionPrompt}
-                            onChange={(event) => setSelectionPrompt(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                handleSelectionPromptSubmit();
-                              }
-                            }}
-                          />
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="absolute right-0 size-8 text-muted-foreground hover:text-foreground"
-                            onClick={handleSelectionPromptSubmit}
-                          >
-                            <ArrowUp className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-0.5 p-1">
-                        <Button
-                          variant="ghost"
-                          className="h-9 justify-start px-2 text-sm font-normal text-muted-foreground hover:text-foreground"
-                          onClick={() => handleSelectionAction("Proof read")}
-                        >
-                          <Eye className="mr-2 size-4" />
-                          Proof read
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="h-9 justify-start px-2 text-sm font-normal text-muted-foreground hover:text-foreground"
-                          onClick={() => handleSelectionAction("Rewrite")}
-                        >
-                          <RefreshCw className="mr-2 size-4" />
-                          Rewrite
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="h-9 justify-start px-2 text-sm font-normal text-muted-foreground hover:text-foreground"
-                          onClick={() => handleSelectionAction("Improve")}
-                        >
-                          <Wand2 className="mr-2 size-4" />
-                          Improve
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div
-                    className={`absolute bottom-6 right-6 z-20 overflow-hidden shadow-lg transition-all duration-300 ${
-                      isAiChatExpanded
-                        ? "h-14 w-[calc(100%-3rem)] rounded-2xl border bg-background md:w-[450px]"
-                        : "size-12 rounded-full"
-                    }`}
-                  >
-                    {!isAiChatExpanded ? (
-                      <Button size="icon" className="size-12 rounded-full" onClick={() => setAiChatExpanded(true)}>
-                        <Sparkles className="size-5" />
-                      </Button>
-                    ) : (
-                      <div className="flex h-full items-center gap-2 px-2">
-                        <Sparkles className="ml-2 size-5 text-primary" />
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="Ask AI to edit or chat with doc..."
-                          className="flex-1 bg-transparent text-sm outline-none"
-                          value={aiChatPrompt}
-                          onChange={(event) => setAiChatPrompt(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              submitAiChatPrompt();
-                            }
-                          }}
-                        />
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 rounded-full"
-                              disabled={aiChatHistory.length === 0}
-                            >
-                              <History className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-64">
-                            <DropdownMenuGroup>
-                              <DropdownMenuLabel>Prompt History</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              {aiChatHistory.length === 0 ? (
-                                <div className="p-2 text-center text-sm text-muted-foreground">No history yet</div>
-                              ) : (
-                                aiChatHistory.map((prompt, index) => (
-                                  <DropdownMenuItem
-                                    key={`${prompt}-${index}`}
-                                    onClick={() => setAiChatPrompt(prompt)}
-                                  >
-                                    <span className="truncate">{prompt}</span>
-                                  </DropdownMenuItem>
-                                ))
-                              )}
-                            </DropdownMenuGroup>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <Button size="icon" className="size-8 rounded-full" onClick={submitAiChatPrompt}>
-                          <ArrowUp className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 rounded-full"
-                          onClick={() => setAiChatExpanded(false)}
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+                  <FloatingAiChat
+                    expanded={isAiChatExpanded}
+                    prompt={aiChatPrompt}
+                    history={aiChatHistory}
+                    onExpand={() => setAiChatExpanded(true)}
+                    onCollapse={() => setAiChatExpanded(false)}
+                    onPromptChange={setAiChatPrompt}
+                    onSubmit={submitAiChatPrompt}
+                    onHistorySelect={setAiChatPrompt}
+                  />
                 </div>
               </ResizablePanel>
             ) : null}
@@ -468,8 +392,12 @@ export function EditorWorkspace() {
             {editorOpen && previewOpen ? <ResizableHandle withHandle /> : null}
 
             {previewOpen ? (
-              <ResizablePanel defaultSize={editorOpen ? previewSize : 100} minSize={30}>
-                <PreviewPanel latexCode={latexCode} />
+              <ResizablePanel
+                defaultSize={editorOpen ? previewSize : 100}
+                minSize={!isMobile && editorOpen ? panelMinWidths.preview : 20}
+                maxSize={!isMobile && editorOpen ? panelMaxWidths.preview : undefined}
+              >
+                <PreviewPanel latexCode={activeFileContent} />
               </ResizablePanel>
             ) : null}
           </ResizablePanelGroup>

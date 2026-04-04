@@ -12,19 +12,12 @@ import {
 } from "./file-tree-utils";
 import { SidebarAiTab } from "./sidebar-ai-tab";
 import { SidebarFilesTab } from "./sidebar-files-tab";
-import { SidebarSearchTab } from "./sidebar-search-tab";
 import { FileNode, SidebarProps } from "./types";
 
 export function EditorSidebar({
   activeSidebarTab,
   sidebarOpen,
   setSidebarOpen,
-  searchQuery,
-  setSearchQuery,
-  replaceQuery,
-  setReplaceQuery,
-  handleFindNext,
-  handleReplaceAll,
   onOpenFile,
   onCreateFile,
   onRenameFile,
@@ -123,19 +116,6 @@ export function EditorSidebar({
           onCloseSidebar={() => setSidebarOpen(false)}
         />
       ) : null}
-
-      {activeSidebarTab === "search" ? (
-        <SidebarSearchTab
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          replaceQuery={replaceQuery}
-          setReplaceQuery={setReplaceQuery}
-          handleFindNext={handleFindNext}
-          handleReplaceAll={handleReplaceAll}
-          onCloseSidebar={() => setSidebarOpen(false)}
-        />
-      ) : null}
-
       {activeSidebarTab === "ai" ? <SidebarAiTab onCloseSidebar={() => setSidebarOpen(false)} /> : null}
     </div>
   );
