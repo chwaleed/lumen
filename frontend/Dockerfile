@@ -9,7 +9,7 @@ COPY . .
 RUN bun run build
 
 # Stage 2: Runner
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -21,6 +21,4 @@ COPY --from=builder /app/public ./public
 USER node
 
 EXPOSE 3000
-CMD ["sh", "-c", "export PORT=${FRONTEND_PORT:?\"FRONTEND_PORT variable is required\"} && node server.js"]
-
 CMD ["node", "server.js"]

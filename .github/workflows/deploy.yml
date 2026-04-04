@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/lumen-backend
   FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/lumen-frontend
 
