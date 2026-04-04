@@ -12,7 +12,7 @@ export default function Home() {
           href="/signup"
           className="mt-6 inline-flex rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
         >
-          Open Signup Page
+          Open Signup Page and test the auth flow
         </Link>
       </div>
     </main>
