@@ -65,3 +65,28 @@ def test_create_app_initializes_sentry_when_dsn_is_configured(monkeypatch) -> No
     assert init_calls[0]["traces_sample_rate"] == 0.25
     assert init_calls[0]["send_default_pii"] is True
     assert len(init_calls[0]["integrations"]) == 1
+
+
+def test_create_app_survives_sentry_init_failure(monkeypatch, caplog) -> None:
+    class FakeSentrySdk:
+        @staticmethod
+        def init(**_kwargs) -> None:
+            raise ImportError("jinja2 must be installed to use Jinja2Templates")
+
+    monkeypatch.setattr(
+        "src.core.observability._load_sentry_sdk",
+        lambda: FakeSentrySdk(),
+    )
+    monkeypatch.setattr(
+        "src.core.observability._load_sentry_logging_integration",
+        lambda: None,
+    )
+
+    settings = Settings(
+        sentry_dsn="https://examplePublicKey@o0.ingest.sentry.io/0",
+    )
+
+    app = create_app(settings=settings, init_db_on_startup=False)
+
+    assert app is not None
+    assert "Sentry initialization failed" in caplog.text

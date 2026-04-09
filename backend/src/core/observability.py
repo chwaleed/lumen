@@ -67,7 +67,12 @@ def initialize_sentry(settings: Settings) -> bool:
             logging_integration(level=logging.INFO, event_level=logging.ERROR),
         ]
 
-    sentry_sdk.init(**init_kwargs)
+    try:
+        sentry_sdk.init(**init_kwargs)
+    except Exception:
+        app_logger.exception("Sentry initialization failed. Continuing without Sentry.")
+        return False
+
     app_logger.info(
         "Sentry initialized for environment=%s with traces_sample_rate=%s",
         settings.sentry_environment,
