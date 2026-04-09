@@ -35,6 +35,16 @@ class Settings(BaseSettings):
         default=7,
         alias="REFRESH_TOKEN_EXPIRE_DAYS",
     )
+    sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
+    sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
+    sentry_traces_sample_rate: float = Field(
+        default=1.0,
+        alias="SENTRY_TRACES_SAMPLE_RATE",
+    )
+    sentry_send_default_pii: bool = Field(
+        default=True,
+        alias="SENTRY_SEND_DEFAULT_PII",
+    )
     
 @lru_cache
 def get_settings() -> Settings:
