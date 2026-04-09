@@ -41,6 +41,8 @@ def test_create_app_initializes_sentry_when_dsn_is_configured(monkeypatch) -> No
         def init(**kwargs) -> None:
             init_calls.append(kwargs)
 
+        logger = object()
+
     monkeypatch.setattr(
         "src.core.observability._load_sentry_sdk",
         lambda: FakeSentrySdk(),
@@ -64,6 +66,7 @@ def test_create_app_initializes_sentry_when_dsn_is_configured(monkeypatch) -> No
     assert init_calls[0]["environment"] == "production"
     assert init_calls[0]["traces_sample_rate"] == 0.25
     assert init_calls[0]["send_default_pii"] is True
+    assert init_calls[0]["enable_logs"] is True
     assert len(init_calls[0]["integrations"]) == 1
 
 
@@ -90,3 +93,43 @@ def test_create_app_survives_sentry_init_failure(monkeypatch, caplog) -> None:
 
     assert app is not None
     assert "Sentry initialization failed" in caplog.text
+
+
+def test_request_logging_middleware_emits_structured_sentry_logs(monkeypatch) -> None:
+    sentry_logs: list[tuple[str, str, dict]] = []
+
+    class FakeStructuredLogger:
+        @staticmethod
+        def info(message: str, attributes: dict) -> None:
+            sentry_logs.append(("info", message, attributes))
+
+    class FakeSentrySdk:
+        logger = FakeStructuredLogger()
+
+        @staticmethod
+        def init(**_kwargs) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "src.core.observability._load_sentry_sdk",
+        lambda: FakeSentrySdk(),
+    )
+    monkeypatch.setattr(
+        "src.core.observability._load_sentry_logging_integration",
+        lambda: None,
+    )
+
+    app = create_app(
+        settings=Settings(sentry_dsn="https://examplePublicKey@o0.ingest.sentry.io/0"),
+        init_db_on_startup=False,
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert sentry_logs
+    assert sentry_logs[0][0] == "info"
+    assert sentry_logs[0][1] == "HTTP request completed"
+    assert sentry_logs[0][2]["http_path"] == "/health"
+    assert sentry_logs[0][2]["http_status_code"] == 200

@@ -34,6 +34,14 @@ def _load_sentry_sdk():
         return None
 
 
+def _load_sentry_structured_logger():
+    sentry_sdk = _load_sentry_sdk()
+    if sentry_sdk is None:
+        return None
+
+    return getattr(sentry_sdk, "logger", None)
+
+
 def _load_sentry_logging_integration():
     try:
         module = import_module("sentry_sdk.integrations.logging")
@@ -59,6 +67,7 @@ def initialize_sentry(settings: Settings) -> bool:
         "environment": settings.sentry_environment,
         "send_default_pii": settings.sentry_send_default_pii,
         "traces_sample_rate": settings.sentry_traces_sample_rate,
+        "enable_logs": True,
     }
 
     logging_integration = _load_sentry_logging_integration()
@@ -74,16 +83,31 @@ def initialize_sentry(settings: Settings) -> bool:
         return False
 
     app_logger.info(
-        "Sentry initialized for environment=%s with traces_sample_rate=%s",
+        "Sentry initialized for environment=%s with traces_sample_rate=%s and logs enabled",
         settings.sentry_environment,
         settings.sentry_traces_sample_rate,
     )
     return True
 
 
+def _emit_sentry_structured_log(level: str, message: str, **attributes) -> None:
+    sentry_logger = _load_sentry_structured_logger()
+    if sentry_logger is None:
+        return
+
+    log_method = getattr(sentry_logger, level, None)
+    if log_method is None:
+        return
+
+    try:
+        log_method(message, attributes=attributes)
+    except Exception:
+        http_logger.exception("Failed to emit structured log to Sentry.")
+
+
 def register_observability(app: FastAPI, settings: Settings) -> None:
     configure_logging()
-    initialize_sentry(settings)
+    sentry_enabled = initialize_sentry(settings)
 
     @app.middleware("http")
     async def request_logging_middleware(request: Request, call_next) -> Response:
@@ -106,6 +130,16 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
                     "duration_ms": duration_ms,
                 },
             )
+            if sentry_enabled:
+                _emit_sentry_structured_log(
+                    "error",
+                    "HTTP request failed",
+                    request_id=request_id,
+                    http_method=request.method,
+                    http_path=request.url.path,
+                    client_ip=client_host,
+                    duration_ms=duration_ms,
+                )
             raise
 
         duration_ms = round((perf_counter() - started_at) * 1000, 2)
@@ -121,4 +155,15 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
                 "duration_ms": duration_ms,
             },
         )
+        if sentry_enabled:
+            _emit_sentry_structured_log(
+                "info",
+                "HTTP request completed",
+                request_id=request_id,
+                http_method=request.method,
+                http_path=request.url.path,
+                http_status_code=response.status_code,
+                client_ip=client_host,
+                duration_ms=duration_ms,
+            )
         return response
