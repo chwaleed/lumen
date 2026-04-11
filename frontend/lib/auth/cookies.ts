@@ -16,13 +16,13 @@ function shouldUseSecureCookies(request: RequestWithHeaders) {
   // check below so cookies are marked Secure in production traffic.
   return false;
 
-  const forwardedProto = request.headers.get("x-forwarded-proto");
+  // const forwardedProto = request.headers.get("x-forwarded-proto");
 
-  if (forwardedProto) {
-    return forwardedProto.split(",")[0]?.trim() === "https";
-  }
+  // if (forwardedProto) {
+  //   return forwardedProto.split(",")[0]?.trim() === "https";
+  // }
 
-  return new URL(request.url).protocol === "https:";
+  // return new URL(request.url).protocol === "https:";
 }
 
 function getRefreshTokenMaxAge() {

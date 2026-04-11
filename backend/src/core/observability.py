@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import base64
+import json
 import logging
+from collections.abc import Awaitable, Callable
 from importlib import import_module
 from time import perf_counter
+from urllib.parse import parse_qs
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
@@ -16,15 +20,67 @@ http_logger = logging.getLogger(HTTP_LOGGER_NAME)
 app_logger = logging.getLogger(APP_LOGGER_NAME)
 
 
+def _serialize_http_body(body: bytes, content_type: str | None) -> object | None:
+    if not body:
+        return None
+
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+
+    if normalized_content_type == "application/x-www-form-urlencoded":
+        return parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True)
+
+    if normalized_content_type == "multipart/form-data":
+        return body.decode("utf-8", errors="replace")
+
+    if normalized_content_type == "application/json" or normalized_content_type.endswith("+json"):
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            return body.decode("utf-8", errors="replace")
+
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError:
+        return {
+            "encoding": "base64",
+            "content": base64.b64encode(body).decode("ascii"),
+        }
+
+
+async def _capture_response_body(response: Response) -> tuple[bytes, Response]:
+    if getattr(response, "body_iterator", None) is None:
+        body = response.body if isinstance(response.body, bytes) else b""
+        return body, response
+
+    chunks = [chunk async for chunk in response.body_iterator]
+    body = b"".join(chunks)
+    rebuilt_response = Response(
+        content=body,
+        status_code=response.status_code,
+        headers=dict(response.headers),
+        media_type=response.media_type,
+        background=response.background,
+    )
+    return body, rebuilt_response
+
+
 def configure_logging() -> None:
     root_logger = logging.getLogger()
     if root_logger.handlers:
+        http_logger.setLevel(logging.INFO)
+        http_logger.propagate = True
+        app_logger.setLevel(logging.INFO)
+        app_logger.propagate = True
         return
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
+    http_logger.setLevel(logging.INFO)
+    http_logger.propagate = True
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = True
 
 
 def _load_sentry_sdk():
@@ -110,15 +166,24 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
     sentry_enabled = initialize_sentry(settings)
 
     @app.middleware("http")
-    async def request_logging_middleware(request: Request, call_next) -> Response:
+    async def request_logging_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         request_id = request.headers.get("X-Request-ID", str(uuid4()))
         request.state.request_id = request_id
         started_at = perf_counter()
         client_host = request.client.host if request.client else "unknown"
+        request_body = await request.body()
+        request_payload = _serialize_http_body(
+            request_body,
+            request.headers.get("content-type"),
+        )
+        request_query_params = dict(request.query_params)
 
         try:
             response = await call_next(request)
-        except Exception:
+        except Exception as exc:
             duration_ms = round((perf_counter() - started_at) * 1000, 2)
             http_logger.exception(
                 "HTTP request failed",
@@ -128,6 +193,9 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
                     "path": request.url.path,
                     "client_ip": client_host,
                     "duration_ms": duration_ms,
+                    "query_params": request_query_params,
+                    "request_payload": request_payload,
+                    "error": repr(exc),
                 },
             )
             if sentry_enabled:
@@ -139,10 +207,18 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
                     http_path=request.url.path,
                     client_ip=client_host,
                     duration_ms=duration_ms,
+                    query_params=request_query_params,
+                    request_payload=request_payload,
+                    error=repr(exc),
                 )
             raise
 
         duration_ms = round((perf_counter() - started_at) * 1000, 2)
+        response_body, response = await _capture_response_body(response)
+        response_payload = _serialize_http_body(
+            response_body,
+            response.headers.get("content-type"),
+        )
         response.headers["X-Request-ID"] = request_id
         http_logger.info(
             "HTTP request completed",
@@ -153,6 +229,9 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
                 "status_code": response.status_code,
                 "client_ip": client_host,
                 "duration_ms": duration_ms,
+                "query_params": request_query_params,
+                "request_payload": request_payload,
+                "response_payload": response_payload,
             },
         )
         if sentry_enabled:
@@ -165,5 +244,8 @@ def register_observability(app: FastAPI, settings: Settings) -> None:
                 http_status_code=response.status_code,
                 client_ip=client_host,
                 duration_ms=duration_ms,
+                query_params=request_query_params,
+                request_payload=request_payload,
+                response_payload=response_payload,
             )
         return response
