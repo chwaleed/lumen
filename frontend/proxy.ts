@@ -44,18 +44,18 @@ export async function proxy(request: NextRequest) {
           ? NextResponse.redirect(new URL("/dashboard", request.url))
           : NextResponse.next();
 
-      applyAuthCookies(response, tokenPair);
+      applyAuthCookies(response, tokenPair, request);
       return response;
     }
 
     const response = isProtectedRoute(pathname) ? NextResponse.redirect(new URL("/login", request.url)) : NextResponse.next();
-    clearAuthCookies(response);
+    clearAuthCookies(response, request);
     return response;
   }
 
   if (accessTokenExpired) {
     const response = isProtectedRoute(pathname) ? NextResponse.redirect(new URL("/login", request.url)) : NextResponse.next();
-    clearAuthCookies(response);
+    clearAuthCookies(response, request);
     return response;
   }
 

@@ -29,6 +29,6 @@ export async function POST(request: Request) {
     { status }
   );
 
-  applyAuthCookies(response, payload.data);
+  applyAuthCookies(response, payload.data, request);
   return response;
 }

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       },
       { status: 401 }
     );
-    clearAuthCookies(response);
+    clearAuthCookies(response, request);
     return response;
   }
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
   if (!payload.success || !payload.data) {
     const response = NextResponse.json(payload, { status });
-    clearAuthCookies(response);
+    clearAuthCookies(response, request);
     return response;
   }
 
@@ -41,6 +41,6 @@ export async function POST(request: Request) {
   );
 
   response.cookies.delete(ACCESS_TOKEN_COOKIE_NAME);
-  applyAuthCookies(response, payload.data);
+  applyAuthCookies(response, payload.data, request);
   return response;
 }

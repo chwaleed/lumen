@@ -35,6 +35,6 @@ export async function POST(request: Request) {
     message: "Logged out successfully.",
   });
 
-  clearAuthCookies(response);
+  clearAuthCookies(response, request);
   return response;
 }

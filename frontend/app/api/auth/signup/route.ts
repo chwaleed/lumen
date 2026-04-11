@@ -58,6 +58,6 @@ export async function POST(request: Request) {
     { status: signupResult.status }
   );
 
-  applyAuthCookies(response, loginResult.payload.data);
+  applyAuthCookies(response, loginResult.payload.data, request);
   return response;
 }
