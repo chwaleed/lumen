@@ -98,6 +98,33 @@ def test_project_creation_listing_and_file_creation_flow(project_client: TestCli
     assert create_file_response.json()["data"]["parent_id"] == folder_id
     assert create_file_response.json()["data"]["name"] == "diagram.png"
 
+    rename_project_response = project_client.patch(
+        f"/projects/{project_id}",
+        json={"name": "Research Notes Final"},
+        headers=headers,
+    )
+    assert rename_project_response.status_code == 200
+    assert rename_project_response.json()["data"]["name"] == "Research Notes Final"
+
+    rename_file_response = project_client.patch(
+        f"/projects/{project_id}/files/{create_file_response.json()['data']['id']}",
+        json={"name": "chart.png"},
+        headers=headers,
+    )
+    assert rename_file_response.status_code == 200
+    assert rename_file_response.json()["data"]["name"] == "chart.png"
+
+    delete_entry_response = project_client.delete(
+        f"/projects/{project_id}/files/{folder_id}",
+        headers=headers,
+    )
+    assert delete_entry_response.status_code == 200
+
+    refreshed_project_response = project_client.get(f"/projects/{project_id}", headers=headers)
+    refreshed_names = {file_entry["name"] for file_entry in refreshed_project_response.json()["data"]["files"]}
+    assert "images" not in refreshed_names
+    assert "chart.png" not in refreshed_names
+
 
 def test_project_endpoints_require_project_ownership(project_client: TestClient) -> None:
     owner_headers = _auth_headers(project_client)

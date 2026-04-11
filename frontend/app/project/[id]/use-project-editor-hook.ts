@@ -2,7 +2,7 @@
 
 import type { editor as MonacoEditor } from "monaco-editor";
 import { create } from "zustand";
-import { addNode } from "@/components/editor-sidebar/file-tree-utils";
+import { addNode, deleteNode, updateNode } from "@/components/editor-sidebar/file-tree-utils";
 import type { FileNode } from "@/components/editor-sidebar";
 import {
   buildFileTree,
@@ -54,6 +54,9 @@ type ProjectEditorState = {
   loadProject: (projectId: string) => Promise<void>;
   openFile: (fileId: string, fileName: string) => void;
   createEntry: (parentId: string | null, type: CreateEntryType) => Promise<void>;
+  renameProject: (name: string) => Promise<boolean>;
+  renameEntry: (entryId: string, name: string) => Promise<boolean>;
+  deleteEntry: (entryId: string) => Promise<boolean>;
   createUntitledFile: () => Promise<void>;
   closeFile: (fileId: string) => void;
   setActiveFile: (fileId: string) => void;
@@ -113,6 +116,38 @@ function createFileNode(entry: ProjectFileEntry): FileNode {
     isOpen: entry.type === "folder",
     children: entry.type === "folder" ? [] : undefined,
   };
+}
+
+function renameOpenFiles(openFiles: EditorFile[], entryId: string, name: string) {
+  return openFiles.map((file) => (file.id === entryId ? { ...file, name } : file));
+}
+
+function collectDescendantIds(nodes: FileNode[], targetId: string): string[] {
+  for (const node of nodes) {
+    if (node.id === targetId) {
+      return collectNodeIds(node);
+    }
+
+    if (node.children) {
+      const nestedIds = collectDescendantIds(node.children, targetId);
+      if (nestedIds.length > 0) {
+        return nestedIds;
+      }
+    }
+  }
+
+  return [];
+}
+
+function collectNodeIds(node: FileNode): string[] {
+  const childIds = (node.children ?? []).flatMap((childNode) => collectNodeIds(childNode));
+  return [node.id, ...childIds];
+}
+
+function removeFileContents(fileContents: Record<string, string>, entryIds: Set<string>) {
+  return Object.fromEntries(
+    Object.entries(fileContents).filter(([fileId]) => !entryIds.has(fileId))
+  );
 }
 
 function initializeProjectState(project: ProjectDetail) {
@@ -305,6 +340,125 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         },
       };
     });
+  },
+  renameProject: async (name) => {
+    const { projectId } = get();
+
+    if (!projectId) {
+      return false;
+    }
+
+    const response = await fetch(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    });
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      message?: string;
+      data?: { name: string };
+    };
+
+    if (!response.ok || !data.success || !data.data) {
+      set({
+        projectErrorMessage: data.message ?? "Unable to rename this project right now.",
+      });
+      return false;
+    }
+
+    set({
+      projectName: data.data.name,
+      projectErrorMessage: null,
+    });
+    return true;
+  },
+  renameEntry: async (entryId, name) => {
+    const { projectId } = get();
+
+    if (!projectId) {
+      return false;
+    }
+
+    const response = await fetch(`/api/projects/${projectId}/files/${entryId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    });
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      message?: string;
+      data?: ProjectFileEntry;
+    };
+
+    if (!response.ok || !data.success || !data.data) {
+      set({
+        projectErrorMessage: data.message ?? "Unable to rename this entry right now.",
+      });
+      return false;
+    }
+
+    const renamedEntry = data.data;
+
+    set((state) => ({
+      filesTree: updateNode(state.filesTree, entryId, (node) => ({
+        ...node,
+        name: renamedEntry.name,
+      })),
+      openFiles:
+        renamedEntry.type === "file"
+          ? renameOpenFiles(state.openFiles, entryId, renamedEntry.name)
+          : state.openFiles,
+      projectErrorMessage: null,
+    }));
+    return true;
+  },
+  deleteEntry: async (entryId) => {
+    const { projectId, filesTree } = get();
+
+    if (!projectId) {
+      return false;
+    }
+
+    const deletedEntryIds = new Set(collectDescendantIds(filesTree, entryId));
+    if (deletedEntryIds.size === 0) {
+      return false;
+    }
+
+    const response = await fetch(`/api/projects/${projectId}/files/${entryId}`, {
+      method: "DELETE",
+    });
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      message?: string;
+    };
+
+    if (!response.ok || !data.success) {
+      set({
+        projectErrorMessage: data.message ?? "Unable to delete this entry right now.",
+      });
+      return false;
+    }
+
+    set((state) => {
+      const nextOpenFiles = state.openFiles.filter((file) => !deletedEntryIds.has(file.id));
+      const isActiveFileDeleted = state.activeFileId ? deletedEntryIds.has(state.activeFileId) : false;
+
+      return {
+        filesTree: deleteNode(state.filesTree, entryId),
+        openFiles: nextOpenFiles,
+        activeFileId: isActiveFileDeleted ? (nextOpenFiles.at(-1)?.id ?? null) : state.activeFileId,
+        fileContents: removeFileContents(state.fileContents, deletedEntryIds),
+        projectErrorMessage: null,
+      };
+    });
+    return true;
   },
   createUntitledFile: async () => {
     await get().createEntry(null, "file");

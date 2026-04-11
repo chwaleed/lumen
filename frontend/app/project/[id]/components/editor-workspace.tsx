@@ -54,6 +54,9 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const loadProject = useProjectEditorHook((state) => state.loadProject);
   const openFile = useProjectEditorHook((state) => state.openFile);
   const createEntry = useProjectEditorHook((state) => state.createEntry);
+  const renameProject = useProjectEditorHook((state) => state.renameProject);
+  const renameEntry = useProjectEditorHook((state) => state.renameEntry);
+  const deleteEntry = useProjectEditorHook((state) => state.deleteEntry);
   const closeFile = useProjectEditorHook((state) => state.closeFile);
   const setActiveFile = useProjectEditorHook((state) => state.setActiveFile);
   const setActiveFileContent = useProjectEditorHook((state) => state.setActiveFileContent);
@@ -316,6 +319,18 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
           onCreateEntry={async (parentId, type) => {
             clearSelectionPopup();
             await createEntry(parentId, type);
+          }}
+          onRenameEntry={async (entryId, name) => {
+            clearSelectionPopup();
+            return renameEntry(entryId, name);
+          }}
+          onDeleteEntry={async (entryId) => {
+            clearSelectionPopup();
+            return deleteEntry(entryId);
+          }}
+          onRenameProject={async (name) => {
+            clearSelectionPopup();
+            return renameProject(name);
           }}
         />
 

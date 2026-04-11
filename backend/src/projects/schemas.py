@@ -9,12 +9,20 @@ class ProjectCreateRequest(BaseModel):
     template_id: str | None = Field(default=None, max_length=50)
 
 
+class ProjectUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
 class FileEntryCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     type: Literal["file", "folder"]
     parent_id: int | None = None
     mime_type: str | None = Field(default=None, max_length=255)
     content: str | None = None
+
+
+class FileEntryUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
 
 
 class FileEntryResponse(BaseModel):

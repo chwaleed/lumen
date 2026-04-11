@@ -4,7 +4,12 @@ from sqlmodel import Session, select
 from src.auth.models import User
 from src.core.security import utc_now
 from src.projects.models import FileEntry, Project
-from src.projects.schemas import FileEntryCreateRequest, ProjectCreateRequest
+from src.projects.schemas import (
+    FileEntryCreateRequest,
+    FileEntryUpdateRequest,
+    ProjectCreateRequest,
+    ProjectUpdateRequest,
+)
 
 DEFAULT_TEMPLATE_ID = "blank"
 
@@ -151,6 +156,17 @@ def _touch_project(session: Session, project: Project) -> None:
     session.add(project)
 
 
+def _delete_file_entry_tree(session: Session, file_entry: FileEntry) -> None:
+    child_entries = list(
+        session.exec(select(FileEntry).where(FileEntry.parent_id == file_entry.id)).all()
+    )
+
+    for child_entry in child_entries:
+        _delete_file_entry_tree(session, child_entry)
+
+    session.delete(file_entry)
+
+
 def _create_default_project_files(session: Session, project: Project, template_id: str | None) -> None:
     main_file = FileEntry(
         project_id=project.id,
@@ -203,6 +219,15 @@ def create_project(session: Session, current_user: User, payload: ProjectCreateR
     return project
 
 
+def update_project(session: Session, current_user: User, project_id: int, payload: ProjectUpdateRequest) -> Project:
+    project = _get_project_for_user(session, current_user, project_id)
+    project.name = _clean_name(payload.name, field_name="Project name")
+    _touch_project(session, project)
+    session.commit()
+    session.refresh(project)
+    return project
+
+
 def list_project_files(session: Session, project: Project) -> list[FileEntry]:
     statement = (
         select(FileEntry)
@@ -247,3 +272,39 @@ def create_file_entry(
     session.commit()
     session.refresh(file_entry)
     return file_entry
+
+
+def update_file_entry(
+    session: Session,
+    current_user: User,
+    project_id: int,
+    file_entry_id: int,
+    payload: FileEntryUpdateRequest,
+) -> FileEntry:
+    project = _get_project_for_user(session, current_user, project_id)
+    file_entry = session.get(FileEntry, file_entry_id)
+
+    if file_entry is None or file_entry.project_id != project.id:
+        raise _projects_exception("File entry not found.", status.HTTP_404_NOT_FOUND)
+
+    file_entry.name = _clean_name(
+        payload.name,
+        field_name="Folder name" if file_entry.type == "folder" else "File name",
+    )
+    session.add(file_entry)
+    _touch_project(session, project)
+    session.commit()
+    session.refresh(file_entry)
+    return file_entry
+
+
+def delete_file_entry(session: Session, current_user: User, project_id: int, file_entry_id: int) -> None:
+    project = _get_project_for_user(session, current_user, project_id)
+    file_entry = session.get(FileEntry, file_entry_id)
+
+    if file_entry is None or file_entry.project_id != project.id:
+        raise _projects_exception("File entry not found.", status.HTTP_404_NOT_FOUND)
+
+    _delete_file_entry_tree(session, file_entry)
+    _touch_project(session, project)
+    session.commit()
