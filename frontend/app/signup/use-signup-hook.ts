@@ -4,6 +4,11 @@ import { create } from "zustand";
 
 type SignupStatus = "idle" | "submitting" | "success" | "error";
 
+type SignupSubmitResult = {
+  success: boolean;
+  sessionEstablished: boolean;
+};
+
 type SignupState = {
   name: string;
   email: string;
@@ -15,7 +20,7 @@ type SignupState = {
   setEmail: (email: string) => void;
   setPassword: (password: string) => void;
   setConfirmPassword: (confirmPassword: string) => void;
-  submit: () => Promise<boolean>;
+  submit: () => Promise<SignupSubmitResult>;
 };
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -36,12 +41,12 @@ export const useSignupHook = create<SignupState>()((set, get) => ({
 
     if (!name.trim()) {
       set({ status: "error", message: "Name is required." });
-      return false;
+      return { success: false, sessionEstablished: false };
     }
 
     if (!email.includes("@")) {
       set({ status: "error", message: "Please enter a valid email address." });
-      return false;
+      return { success: false, sessionEstablished: false };
     }
 
     if (password.length < MIN_PASSWORD_LENGTH) {
@@ -49,18 +54,18 @@ export const useSignupHook = create<SignupState>()((set, get) => ({
         status: "error",
         message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
       });
-      return false;
+      return { success: false, sessionEstablished: false };
     }
 
     if (password !== confirmPassword) {
       set({ status: "error", message: "Passwords do not match." });
-      return false;
+      return { success: false, sessionEstablished: false };
     }
 
     set({ status: "submitting", message: null });
 
     try {
-      const response = await fetch("/api/signup", {
+      const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -71,6 +76,9 @@ export const useSignupHook = create<SignupState>()((set, get) => ({
       const data = (await response.json()) as {
         success?: boolean;
         message?: string;
+        data?: {
+          sessionEstablished?: boolean;
+        };
       };
 
       if (!response.ok || !data.success) {
@@ -78,21 +86,27 @@ export const useSignupHook = create<SignupState>()((set, get) => ({
           status: "error",
           message: data.message ?? "Unable to create account right now.",
         });
-        return false;
+        return { success: false, sessionEstablished: false };
       }
 
       set({
         status: "success",
-        message: data.message ?? "Account created successfully.",
+        message:
+          data.message ??
+          (data.data?.sessionEstablished
+            ? "Account created successfully."
+            : "Account created successfully. Please log in to continue."),
       });
-      return true;
+      return {
+        success: true,
+        sessionEstablished: Boolean(data.data?.sessionEstablished),
+      };
     } catch {
       set({
         status: "error",
         message: "Unable to reach signup service. Please try again.",
       });
-      return false;
+      return { success: false, sessionEstablished: false };
     }
   },
 }));
-

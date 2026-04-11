@@ -23,9 +23,15 @@ export function SignupForm() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const isSuccess = await submit();
+    const result = await submit();
 
-    if (isSuccess) {
+    if (result.success && result.sessionEstablished) {
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    if (result.success) {
       router.push("/login");
     }
   }

@@ -41,10 +41,38 @@ export const useLoginHook = create<LoginState>()((set, get) => ({
 
     set({ status: "submitting", errorMessage: null });
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    set({ status: "success", errorMessage: null });
-    return true;
+      const data = (await response.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            message?: string;
+          }
+        | null;
+
+      if (!response.ok || !data?.success) {
+        set({
+          status: "error",
+          errorMessage: data?.message ?? "Unable to log in right now.",
+        });
+        return false;
+      }
+
+      set({ status: "success", errorMessage: null });
+      return true;
+    } catch {
+      set({
+        status: "error",
+        errorMessage: "Unable to reach the login service. Please try again.",
+      });
+      return false;
+    }
   },
 }));
-

@@ -7,8 +7,6 @@ import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth-shell";
 import { useLoginHook } from "@/app/login/use-login-hook";
 
-const LOGIN_STORAGE_KEY = "lumen_is_logged_in";
-
 export function LoginForm() {
   const router = useRouter();
   const email = useLoginHook((state) => state.email);
@@ -24,8 +22,8 @@ export function LoginForm() {
     const isSuccess = await submit();
 
     if (isSuccess) {
-      window.localStorage.setItem(LOGIN_STORAGE_KEY, "true");
       router.push("/dashboard");
+      router.refresh();
     }
   }
 

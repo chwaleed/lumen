@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DashboardSidebar, type DashboardTab } from "@/app/(dashboard)/components/dashboard-sidebar";
 import { ProjectsHeader } from "@/app/(dashboard)/components/projects-header";
@@ -23,11 +23,10 @@ function getActiveTab(pathname: string): DashboardTab {
   return "recent";
 }
 
-const LOGIN_STORAGE_KEY = "lumen_is_logged_in";
-
 export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [, startTransition] = useTransition();
 
   const searchQuery = useDashboardLayoutHook((state) => state.searchQuery);
   const setSearchQuery = useDashboardLayoutHook((state) => state.setSearchQuery);
@@ -73,8 +72,15 @@ export function DashboardShell({ children }: DashboardShellProps) {
   };
 
   const handleLogout = () => {
-    window.localStorage.removeItem(LOGIN_STORAGE_KEY);
-    router.push("/login");
+    startTransition(() => {
+      void (async () => {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+        });
+        router.push("/login");
+        router.refresh();
+      })();
+    });
   };
 
   return (
