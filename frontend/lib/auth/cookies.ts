@@ -9,7 +9,7 @@ type RequestWithHeaders = {
   url: string;
 };
 
-function shouldUseSecureCookies(request: RequestWithHeaders) {
+function shouldUseSecureCookies() {
   // Temporary local/server HTTP bypass:
   // keep auth cookies non-secure until SSL and the final domain are configured.
   // Once HTTPS is enabled, replace this early return with the protocol-based
@@ -34,9 +34,10 @@ function getRefreshTokenMaxAge() {
 export function applyAuthCookies(
   response: NextResponse,
   tokenPair: TokenPair,
-  request: RequestWithHeaders
+  _request: RequestWithHeaders
 ) {
-  const secure = shouldUseSecureCookies(request);
+  void _request;
+  const secure = shouldUseSecureCookies();
 
   response.cookies.set({
     name: ACCESS_TOKEN_COOKIE_NAME,
@@ -59,8 +60,9 @@ export function applyAuthCookies(
   });
 }
 
-export function clearAuthCookies(response: NextResponse, request: RequestWithHeaders) {
-  const secure = shouldUseSecureCookies(request);
+export function clearAuthCookies(response: NextResponse, _request: RequestWithHeaders) {
+  void _request;
+  const secure = shouldUseSecureCookies();
 
   for (const cookieName of [ACCESS_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME]) {
     response.cookies.set({

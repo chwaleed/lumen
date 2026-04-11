@@ -1,88 +1,61 @@
 "use client";
 
-import { useState } from "react";
-import {
-  addNode,
-  createNewFileNode,
-  createNewFolderNode,
-  deleteNode,
-  duplicateNode,
-  initialFiles,
-  updateNode,
-} from "./file-tree-utils";
+import { useMemo, useState } from "react";
 import { SidebarAiTab } from "./sidebar-ai-tab";
 import { SidebarFilesTab } from "./sidebar-files-tab";
-import { FileNode, SidebarProps } from "./types";
+import { SidebarProps } from "./types";
 
 export function EditorSidebar({
   activeSidebarTab,
   sidebarOpen,
+  projectName,
+  files: incomingFiles,
   setSidebarOpen,
   onOpenFile,
-  onCreateFile,
-  onRenameFile,
-  onDeleteFile,
+  onCreateEntry,
 }: SidebarProps) {
-  const [files, setFiles] = useState<FileNode[]>(initialFiles);
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [projectName, setProjectName] = useState("EXPLORER");
-  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
-  const [editProjectNameValue, setEditProjectNameValue] = useState("");
+  const [folderOpenState, setFolderOpenState] = useState<Record<string, boolean>>({});
+
+  const findFolderOpenState = (nodes: SidebarProps["files"], id: string): boolean | undefined => {
+    for (const node of nodes) {
+      if (node.id === id) {
+        return Boolean(node.isOpen);
+      }
+
+      if (node.children) {
+        const nestedResult = findFolderOpenState(node.children, id);
+        if (nestedResult !== undefined) {
+          return nestedResult;
+        }
+      }
+    }
+
+    return undefined;
+  };
+
+  const files = useMemo(() => {
+    const applyFolderState = (nodes: SidebarProps["files"]): SidebarProps["files"] =>
+      nodes.map((node) => ({
+        ...node,
+        isOpen:
+          node.type === "folder"
+            ? (folderOpenState[node.id] ?? node.isOpen ?? false)
+            : undefined,
+        children: node.children ? applyFolderState(node.children) : undefined,
+      }));
+
+    return applyFolderState(incomingFiles);
+  }, [folderOpenState, incomingFiles]);
 
   if (!sidebarOpen) {
     return null;
   }
 
-  const findNodeById = (nodes: FileNode[], id: string): FileNode | null => {
-    for (const node of nodes) {
-      if (node.id === id) {
-        return node;
-      }
-      if (node.children) {
-        const nested = findNodeById(node.children, id);
-        if (nested) {
-          return nested;
-        }
-      }
-    }
-    return null;
-  };
-
   const handleToggleFolder = (id: string) => {
-    setFiles(updateNode(files, id, (node) => ({ ...node, isOpen: !node.isOpen })));
-  };
-
-  const handleAddFile = (parentId: string) => {
-    const newNode = createNewFileNode();
-    setFiles(addNode(files, parentId, newNode));
-    setEditingNodeId(newNode.id);
-    setEditName(newNode.name);
-    onCreateFile(newNode.id, newNode.name);
-  };
-
-  const handleAddFolder = (parentId: string) => {
-    const newNode = createNewFolderNode();
-    setFiles(addNode(files, parentId, newNode));
-    setEditingNodeId(newNode.id);
-    setEditName(newNode.name);
-  };
-
-  const handleRename = (id: string, currentName: string) => {
-    setEditingNodeId(id);
-    setEditName(currentName);
-  };
-
-  const submitRename = (id: string) => {
-    if (editName.trim()) {
-      const trimmedName = editName.trim();
-      const targetNode = findNodeById(files, id);
-      setFiles(updateNode(files, id, (node) => ({ ...node, name: trimmedName })));
-      if (targetNode?.type === "file") {
-        onRenameFile(id, trimmedName);
-      }
-    }
-    setEditingNodeId(null);
+    setFolderOpenState((currentState) => ({
+      ...currentState,
+      [id]: !(currentState[id] ?? findFolderOpenState(files, id) ?? false),
+    }));
   };
 
   return (
@@ -90,28 +63,10 @@ export function EditorSidebar({
       {activeSidebarTab === "files" ? (
         <SidebarFilesTab
           files={files}
-          editingNodeId={editingNodeId}
-          editName={editName}
-          setEditName={setEditName}
           projectName={projectName}
-          isEditingProjectName={isEditingProjectName}
-          editProjectNameValue={editProjectNameValue}
-          setEditProjectNameValue={setEditProjectNameValue}
-          setIsEditingProjectName={setIsEditingProjectName}
-          setProjectName={setProjectName}
           onToggleFolder={handleToggleFolder}
-          onSubmitRename={submitRename}
-          onStartRename={handleRename}
-          onDuplicate={(id) => setFiles(duplicateNode(files, id))}
-          onDelete={(id) => {
-            const targetNode = findNodeById(files, id);
-            setFiles(deleteNode(files, id));
-            if (targetNode?.type === "file") {
-              onDeleteFile(id);
-            }
-          }}
-          onAddFile={handleAddFile}
-          onAddFolder={handleAddFolder}
+          onAddFile={(parentId) => void onCreateEntry(parentId === "root" ? null : parentId, "file")}
+          onAddFolder={(parentId) => void onCreateEntry(parentId === "root" ? null : parentId, "folder")}
           onOpenFile={onOpenFile}
           onCloseSidebar={() => setSidebarOpen(false)}
         />

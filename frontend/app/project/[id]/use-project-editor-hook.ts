@@ -2,6 +2,15 @@
 
 import type { editor as MonacoEditor } from "monaco-editor";
 import { create } from "zustand";
+import { addNode } from "@/components/editor-sidebar/file-tree-utils";
+import type { FileNode } from "@/components/editor-sidebar";
+import {
+  buildFileTree,
+  createFileContents,
+  findInitialOpenFile,
+  type ProjectDetail,
+  type ProjectFileEntry,
+} from "@/lib/projects";
 
 export type SidebarTab = "files" | "ai";
 
@@ -10,7 +19,16 @@ export type EditorFile = {
   name: string;
 };
 
+type LoadStatus = "idle" | "loading" | "loaded" | "error";
+
+type CreateEntryType = "file" | "folder";
+
 type ProjectEditorState = {
+  projectId: string | null;
+  projectName: string;
+  projectStatus: LoadStatus;
+  projectErrorMessage: string | null;
+  filesTree: FileNode[];
   activeSidebarTab: SidebarTab;
   sidebarOpen: boolean;
   editorOpen: boolean;
@@ -33,11 +51,10 @@ type ProjectEditorState = {
   setAiChatPrompt: (value: string) => void;
   submitAiChatPrompt: () => void;
   initializeForViewport: (isMobile: boolean) => void;
+  loadProject: (projectId: string) => Promise<void>;
   openFile: (fileId: string, fileName: string) => void;
-  createFile: (fileId: string, fileName: string) => void;
-  createUntitledFile: () => void;
-  renameFile: (fileId: string, fileName: string) => void;
-  deleteFile: (fileId: string) => void;
+  createEntry: (parentId: string | null, type: CreateEntryType) => Promise<void>;
+  createUntitledFile: () => Promise<void>;
   closeFile: (fileId: string) => void;
   setActiveFile: (fileId: string) => void;
   setActiveFileContent: (value: string) => void;
@@ -48,48 +65,7 @@ type ProjectEditorState = {
   insertSnippet: (textToInsert: string) => void;
 };
 
-const DEFAULT_LATEX = `\\documentclass{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsmath}
-
-\\title{AI-Powered LaTeX Editor}
-\\author{User}
-\\date{\\today}
-
-\\begin{document}
-
-\\maketitle
-
-\\section{Introduction}
-Welcome to your new AI-powered LaTeX editor. Start typing your document here.
-
-\\subsection{Mathematics}
-You can easily write complex equations:
-\\begin{equation}
-E = mc^2
-\\end{equation}
-
-\\section{Conclusion}
-This is a placeholder for the live preview.
-
-\\end{document}`;
-
-const DEFAULT_BIB = `@article{sample2026,
-  title={Sample Reference},
-  author={Doe, Jane},
-  journal={Journal of TeX},
-  year={2026}
-}`;
-
-const DEFAULT_OPEN_FILES: EditorFile[] = [{ id: "1", name: "main.tex" }];
-
-const DEFAULT_FILE_CONTENTS: Record<string, string> = {
-  "1": DEFAULT_LATEX,
-  "2": DEFAULT_BIB,
-  "4": "",
-};
-
-function withFile(state: ProjectEditorState, fileId: string, fileName: string) {
+function withOpenFile(state: ProjectEditorState, fileId: string, fileName: string) {
   const hasOpenTab = state.openFiles.some((file) => file.id === fileId);
   const openFiles = hasOpenTab ? state.openFiles : [...state.openFiles, { id: fileId, name: fileName }];
   const hasContent = Object.prototype.hasOwnProperty.call(state.fileContents, fileId);
@@ -102,16 +78,75 @@ function withFile(state: ProjectEditorState, fileId: string, fileName: string) {
   };
 }
 
+function getDefaultEntryName(tree: FileNode[], type: CreateEntryType) {
+  const existingNames = new Set<string>();
+
+  const collectNames = (nodes: FileNode[]) => {
+    for (const node of nodes) {
+      existingNames.add(node.name);
+      if (node.children) {
+        collectNames(node.children);
+      }
+    }
+  };
+
+  collectNames(tree);
+
+  const baseName = type === "file" ? "new_file" : "New Folder";
+  const extension = type === "file" ? ".tex" : "";
+
+  let candidate = `${baseName}${extension}`;
+  let counter = 2;
+  while (existingNames.has(candidate)) {
+    candidate = `${baseName}_${counter}${extension}`;
+    counter += 1;
+  }
+
+  return candidate;
+}
+
+function createFileNode(entry: ProjectFileEntry): FileNode {
+  return {
+    id: String(entry.id),
+    name: entry.name,
+    type: entry.type,
+    isOpen: entry.type === "folder",
+    children: entry.type === "folder" ? [] : undefined,
+  };
+}
+
+function initializeProjectState(project: ProjectDetail) {
+  const tree = buildFileTree(project.files);
+  const fileContents = createFileContents(project.files);
+  const initialFile = findInitialOpenFile(project.files);
+
+  return {
+    projectId: String(project.id),
+    projectName: project.name,
+    projectStatus: "loaded" as const,
+    projectErrorMessage: null,
+    filesTree: tree,
+    openFiles: initialFile ? [{ id: String(initialFile.id), name: initialFile.name }] : [],
+    activeFileId: initialFile ? String(initialFile.id) : null,
+    fileContents,
+  };
+}
+
 export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => ({
+  projectId: null,
+  projectName: "Project",
+  projectStatus: "idle",
+  projectErrorMessage: null,
+  filesTree: [],
   activeSidebarTab: "files",
   sidebarOpen: true,
   editorOpen: true,
   previewOpen: true,
   wordWrap: true,
   editorInstance: null,
-  openFiles: DEFAULT_OPEN_FILES,
-  activeFileId: "1",
-  fileContents: DEFAULT_FILE_CONTENTS,
+  openFiles: [],
+  activeFileId: null,
+  fileContents: {},
   isAiChatExpanded: false,
   aiChatPrompt: "",
   aiChatHistory: [],
@@ -156,33 +191,124 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       editorOpen: true,
       previewOpen: !isMobile,
     }),
-  openFile: (fileId, fileName) => set((state) => withFile(state, fileId, fileName)),
-  createFile: (fileId, fileName) => set((state) => withFile(state, fileId, fileName)),
-  createUntitledFile: () => {
-    const id = `file-${Date.now()}`;
-    set((state) => withFile(state, id, "new_file.tex"));
-  },
-  renameFile: (fileId, fileName) =>
-    set((state) => ({
-      openFiles: state.openFiles.map((file) => (file.id === fileId ? { ...file, name: fileName } : file)),
-    })),
-  deleteFile: (fileId) =>
-    set((state) => {
-      const nextOpenFiles = state.openFiles.filter((file) => file.id !== fileId);
-      const nextFileContents = { ...state.fileContents };
-      delete nextFileContents[fileId];
+  loadProject: async (projectId) => {
+    const { projectId: loadedProjectId, projectStatus } = get();
 
-      let nextActiveFileId = state.activeFileId;
-      if (state.activeFileId === fileId) {
-        nextActiveFileId = nextOpenFiles.length > 0 ? nextOpenFiles[Math.max(0, nextOpenFiles.length - 1)].id : null;
+    if (loadedProjectId === projectId && projectStatus === "loaded") {
+      return;
+    }
+
+    set({
+      projectId,
+      projectStatus: "loading",
+      projectErrorMessage: null,
+    });
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: ProjectDetail;
+      };
+
+      if (!response.ok || !data.success || !data.data) {
+        set({
+          projectStatus: "error",
+          projectErrorMessage: data.message ?? "Unable to load this project right now.",
+        });
+        return;
       }
 
+      set(initializeProjectState(data.data));
+    } catch {
+      set({
+        projectStatus: "error",
+        projectErrorMessage: "Unable to reach the project service. Please try again.",
+      });
+    }
+  },
+  openFile: (fileId, fileName) => set((state) => withOpenFile(state, fileId, fileName)),
+  createEntry: async (parentId, type) => {
+    const { projectId, filesTree } = get();
+
+    if (!projectId) {
+      return;
+    }
+
+    const name = getDefaultEntryName(filesTree, type);
+
+    const response = await fetch(`/api/projects/${projectId}/files`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name,
+        type,
+        parent_id: parentId ? Number(parentId) : null,
+        mime_type: type === "file" ? "text/x-tex" : null,
+        content: type === "file" ? "" : null,
+      }),
+    });
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      message?: string;
+      data?: ProjectFileEntry;
+    };
+
+    if (!response.ok || !data.success || !data.data) {
+      set({
+        projectErrorMessage: data.message ?? "Unable to create a new entry right now.",
+      });
+      return;
+    }
+
+    const newEntry = data.data;
+    const fileNode = createFileNode(newEntry);
+
+    set((state) => {
+      const nextFilesTree = addNode(state.filesTree, parentId ?? "root", fileNode);
+
+      if (newEntry.type === "folder") {
+        return {
+          filesTree: nextFilesTree,
+          projectErrorMessage: null,
+        };
+      }
+
+      const fileId = String(newEntry.id);
+      const nextState = withOpenFile(
+        {
+          ...state,
+          filesTree: nextFilesTree,
+          fileContents: {
+            ...state.fileContents,
+            [fileId]: newEntry.content ?? "",
+          },
+        } as ProjectEditorState,
+        fileId,
+        newEntry.name
+      );
+
       return {
-        openFiles: nextOpenFiles,
-        fileContents: nextFileContents,
-        activeFileId: nextActiveFileId,
+        filesTree: nextFilesTree,
+        projectErrorMessage: null,
+        openFiles: nextState.openFiles,
+        activeFileId: nextState.activeFileId,
+        fileContents: {
+          ...nextState.fileContents,
+          [fileId]: newEntry.content ?? "",
+        },
       };
-    }),
+    });
+  },
+  createUntitledFile: async () => {
+    await get().createEntry(null, "file");
+  },
   closeFile: (fileId) =>
     set((state) => {
       const index = state.openFiles.findIndex((file) => file.id === fileId);

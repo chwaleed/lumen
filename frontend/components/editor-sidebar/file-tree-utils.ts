@@ -86,3 +86,27 @@ export function duplicateNode(nodes: FileNode[], id: string): FileNode[] {
     return node;
   });
 }
+
+export function preserveOpenState(nextNodes: FileNode[], currentNodes: FileNode[]): FileNode[] {
+  const openStateById = new Map<string, boolean>();
+
+  const collectOpenState = (nodes: FileNode[]) => {
+    for (const node of nodes) {
+      if (node.type === "folder") {
+        openStateById.set(node.id, Boolean(node.isOpen));
+        collectOpenState(node.children ?? []);
+      }
+    }
+  };
+
+  collectOpenState(currentNodes);
+
+  const applyOpenState = (nodes: FileNode[]): FileNode[] =>
+    nodes.map((node) => ({
+      ...node,
+      isOpen: node.type === "folder" ? (openStateById.get(node.id) ?? node.isOpen ?? false) : undefined,
+      children: node.children ? applyOpenState(node.children) : undefined,
+    }));
+
+  return applyOpenState(nextNodes);
+}

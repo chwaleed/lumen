@@ -111,7 +111,7 @@ export function EditorTopBar() {
               </TooltipAction>
               <DropdownMenuContent align="start">
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={createUntitledFile}>
+                  <DropdownMenuItem onClick={() => void createUntitledFile()}>
                     New File
                     <DropdownMenuShortcut>Ctrl+N</DropdownMenuShortcut>
                   </DropdownMenuItem>

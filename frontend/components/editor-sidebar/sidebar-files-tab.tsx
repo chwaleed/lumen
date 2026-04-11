@@ -1,6 +1,5 @@
 import { FilePlus, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarHeader } from "./sidebar-header";
 import { SidebarTreeNode } from "./sidebar-tree-node";
@@ -8,20 +7,8 @@ import { FileNode } from "./types";
 
 type SidebarFilesTabProps = {
   files: FileNode[];
-  editingNodeId: string | null;
-  editName: string;
-  setEditName: (name: string) => void;
   projectName: string;
-  isEditingProjectName: boolean;
-  editProjectNameValue: string;
-  setEditProjectNameValue: (name: string) => void;
-  setIsEditingProjectName: (editing: boolean) => void;
-  setProjectName: (name: string) => void;
   onToggleFolder: (id: string) => void;
-  onSubmitRename: (id: string) => void;
-  onStartRename: (id: string, currentName: string) => void;
-  onDuplicate: (id: string) => void;
-  onDelete: (id: string) => void;
   onAddFile: (parentId: string) => void;
   onAddFolder: (parentId: string) => void;
   onOpenFile: (fileId: string, fileName: string) => void;
@@ -30,20 +17,8 @@ type SidebarFilesTabProps = {
 
 export function SidebarFilesTab({
   files,
-  editingNodeId,
-  editName,
-  setEditName,
   projectName,
-  isEditingProjectName,
-  editProjectNameValue,
-  setEditProjectNameValue,
-  setIsEditingProjectName,
-  setProjectName,
   onToggleFolder,
-  onSubmitRename,
-  onStartRename,
-  onDuplicate,
-  onDelete,
   onAddFile,
   onAddFolder,
   onOpenFile,
@@ -52,45 +27,7 @@ export function SidebarFilesTab({
   return (
     <div className="flex flex-col h-full">
       <SidebarHeader
-        title={
-          isEditingProjectName ? (
-            <Input
-              value={editProjectNameValue}
-              onChange={(event) => setEditProjectNameValue(event.target.value)}
-              onBlur={() => {
-                if (editProjectNameValue.trim()) {
-                  setProjectName(editProjectNameValue.trim().toUpperCase());
-                }
-                setIsEditingProjectName(false);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  if (editProjectNameValue.trim()) {
-                    setProjectName(editProjectNameValue.trim().toUpperCase());
-                  }
-                  setIsEditingProjectName(false);
-                }
-
-                if (event.key === "Escape") {
-                  setIsEditingProjectName(false);
-                }
-              }}
-              className="h-6 text-xs px-1 py-0 w-32 bg-background font-semibold uppercase tracking-wider"
-              autoFocus
-            />
-          ) : (
-            <h2
-              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-foreground transition-colors truncate mr-2"
-              onClick={() => {
-                setEditProjectNameValue(projectName);
-                setIsEditingProjectName(true);
-              }}
-              title="Click to rename project"
-            >
-              {projectName}
-            </h2>
-          )
-        }
+        title={<h2 className="mr-2 truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">{projectName}</h2>}
         rightContent={
           <>
             <Button
@@ -125,14 +62,7 @@ export function SidebarFilesTab({
               key={node.id}
               node={node}
               level={0}
-              editingNodeId={editingNodeId}
-              editName={editName}
-              setEditName={setEditName}
               onToggleFolder={onToggleFolder}
-              onSubmitRename={onSubmitRename}
-              onStartRename={onStartRename}
-              onDuplicate={onDuplicate}
-              onDelete={onDelete}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
               onOpenFile={onOpenFile}

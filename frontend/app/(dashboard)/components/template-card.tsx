@@ -12,16 +12,18 @@ const TONE_CLASSES: Record<TemplateItem["tone"], string> = {
 
 type TemplateCardProps = {
   template: TemplateItem;
-  onOpenProject: (projectId: string) => void;
+  onCreateProject: (templateId: string) => void | Promise<void>;
+  isCreating?: boolean;
 };
 
-export function TemplateCard({ template, onOpenProject }: TemplateCardProps) {
+export function TemplateCard({ template, onCreateProject, isCreating = false }: TemplateCardProps) {
   const Icon = template.icon;
 
   return (
     <button
       type="button"
-      onClick={() => onOpenProject(template.id)}
+      onClick={() => void onCreateProject(template.id)}
+      disabled={isCreating}
       className="group flex w-full items-center gap-4 overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-sm"
     >
       <div className={`flex size-12 items-center justify-center rounded-lg ${TONE_CLASSES[template.tone]}`}>

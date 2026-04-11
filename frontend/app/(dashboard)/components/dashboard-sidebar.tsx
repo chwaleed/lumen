@@ -28,8 +28,9 @@ type DashboardSidebarProps = {
   activeTab: DashboardTab;
   setSidebarOpen: (open: boolean) => void;
   onSelectTab: (tab: DashboardTab) => void;
-  onOpenProject: (projectId: string) => void;
+  onCreateProject: () => void;
   onLogout: () => void;
+  isCreatingProject?: boolean;
   user: {
     name: string;
     email: string;
@@ -43,8 +44,9 @@ export function DashboardSidebar({
   activeTab,
   setSidebarOpen,
   onSelectTab,
-  onOpenProject,
+  onCreateProject,
   onLogout,
+  isCreatingProject = false,
   user,
 }: DashboardSidebarProps) {
   const containerVisibility = isMobile
@@ -66,9 +68,9 @@ export function DashboardSidebar({
       </div>
 
       <div className="px-4 py-4">
-        <Button className="w-full justify-start" size="lg" onClick={() => onOpenProject("new")}>
+        <Button className="w-full justify-start" size="lg" onClick={onCreateProject} disabled={isCreatingProject}>
           <Plus data-icon="inline-start" />
-          New Project
+          {isCreatingProject ? "Creating..." : "New Project"}
         </Button>
       </div>
 

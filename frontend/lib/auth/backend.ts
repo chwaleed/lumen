@@ -42,8 +42,10 @@ export type UserResponse = {
   created_at: string;
 };
 
-type PostBackendAuthOptions = {
+type BackendRequestOptions = {
   accessToken?: string;
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: unknown;
 };
 
 function getBackendUrl() {
@@ -58,17 +60,16 @@ function getFallbackError<TData>(message: string): BackendApiResponse<TData> {
   };
 }
 
-export async function postBackendAuth<TData>(
+export async function fetchBackend<TData>(
   path: string,
-  body: unknown,
-  options: PostBackendAuthOptions = {}
+  options: BackendRequestOptions = {}
 ): Promise<{
   status: number;
   payload: BackendApiResponse<TData>;
 }> {
   try {
     const response = await fetch(`${getBackendUrl()}${path}`, {
-      method: "POST",
+      method: options.method ?? "GET",
       headers: {
         "Content-Type": "application/json",
         ...(options.accessToken
@@ -77,7 +78,11 @@ export async function postBackendAuth<TData>(
             }
           : {}),
       },
-      body: JSON.stringify(body),
+      ...(options.body === undefined
+        ? {}
+        : {
+            body: JSON.stringify(options.body),
+          }),
       cache: "no-store",
     });
 
@@ -98,4 +103,16 @@ export async function postBackendAuth<TData>(
       payload: getFallbackError<TData>("Unable to reach backend service."),
     };
   }
+}
+
+export async function postBackendAuth<TData>(
+  path: string,
+  body: unknown,
+  options: Omit<BackendRequestOptions, "method" | "body"> = {}
+) {
+  return fetchBackend<TData>(path, {
+    ...options,
+    method: "POST",
+    body,
+  });
 }

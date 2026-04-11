@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { DashboardSidebar, type DashboardTab } from "@/app/(dashboard)/components/dashboard-sidebar";
 import { ProjectsHeader } from "@/app/(dashboard)/components/projects-header";
 import { useDashboardLayoutHook } from "@/app/(dashboard)/use-dashboard-layout-hook";
+import { useDashboardProjectsHook } from "@/app/(dashboard)/use-dashboard-projects-hook";
 import { useThemeStore } from "@/lib/stores/theme-store";
 
 type DashboardShellProps = {
@@ -30,6 +31,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
   const searchQuery = useDashboardLayoutHook((state) => state.searchQuery);
   const setSearchQuery = useDashboardLayoutHook((state) => state.setSearchQuery);
+  const createProject = useDashboardProjectsHook((state) => state.createProject);
+  const createStatus = useDashboardProjectsHook((state) => state.createStatus);
+  const ensureProjectsLoaded = useDashboardProjectsHook((state) => state.ensureProjectsLoaded);
 
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
@@ -53,6 +57,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
       media.removeEventListener("change", sync);
     };
   }, []);
+
+  useEffect(() => {
+    void ensureProjectsLoaded();
+  }, [ensureProjectsLoaded]);
 
   const activeTab = useMemo(() => getActiveTab(pathname ?? "/dashboard"), [pathname]);
   const isDarkMode = theme === "dark";
@@ -83,6 +91,17 @@ export function DashboardShell({ children }: DashboardShellProps) {
     });
   };
 
+  const handleCreateProject = () => {
+    startTransition(() => {
+      void (async () => {
+        const projectId = await createProject();
+        if (projectId) {
+          router.push(`/project/${projectId}`);
+        }
+      })();
+    });
+  };
+
   return (
     <div className="relative flex min-h-screen bg-background text-foreground">
       {isMobile && sidebarOpen ? (
@@ -95,8 +114,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
         activeTab={activeTab}
         setSidebarOpen={setSidebarOpen}
         onSelectTab={handleSelectTab}
-        onOpenProject={(id) => router.push(`/project/${id}`)}
+        onCreateProject={handleCreateProject}
         onLogout={handleLogout}
+        isCreatingProject={createStatus === "submitting"}
         user={{ name: "User", email: "user@example.com" }}
       />
 

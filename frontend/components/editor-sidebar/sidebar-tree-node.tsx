@@ -1,11 +1,9 @@
-import { ChevronDown, ChevronRight, Copy, Edit2, FilePlus, FileText, Folder, FolderPlus, Image as ImageIcon, MoreVertical, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderPlus, Image as ImageIcon, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FileNode } from "./types";
@@ -13,14 +11,7 @@ import { FileNode } from "./types";
 type SidebarTreeNodeProps = {
   node: FileNode;
   level: number;
-  editingNodeId: string | null;
-  editName: string;
-  setEditName: (name: string) => void;
   onToggleFolder: (id: string) => void;
-  onSubmitRename: (id: string) => void;
-  onStartRename: (id: string, currentName: string) => void;
-  onDuplicate: (id: string) => void;
-  onDelete: (id: string) => void;
   onAddFile: (parentId: string) => void;
   onAddFolder: (parentId: string) => void;
   onOpenFile: (fileId: string, fileName: string) => void;
@@ -39,14 +30,7 @@ function renderFileIcon(name: string) {
 export function SidebarTreeNode({
   node,
   level,
-  editingNodeId,
-  editName,
-  setEditName,
   onToggleFolder,
-  onSubmitRename,
-  onStartRename,
-  onDuplicate,
-  onDelete,
   onAddFile,
   onAddFolder,
   onOpenFile,
@@ -56,7 +40,7 @@ export function SidebarTreeNode({
   return (
     <div>
       <div
-        className={`flex items-center justify-between py-1.5 text-sm rounded-md hover:bg-muted group ${editingNodeId === node.id ? "bg-muted" : ""}`}
+        className="flex items-center justify-between rounded-md py-1.5 text-sm hover:bg-muted group"
         style={{ paddingLeft: `${paddingLeft}px`, paddingRight: "8px" }}
       >
         <div
@@ -81,22 +65,11 @@ export function SidebarTreeNode({
             </>
           )}
 
-          {editingNodeId === node.id ? (
-            <Input
-              value={editName}
-              onChange={(event) => setEditName(event.target.value)}
-              onBlur={() => onSubmitRename(node.id)}
-              onKeyDown={(event) => event.key === "Enter" && onSubmitRename(node.id)}
-              className="h-6 text-xs px-1 py-0 w-full bg-background"
-              autoFocus
-              onClick={(event) => event.stopPropagation()}
-            />
-          ) : (
-            <span className="truncate">{node.name}</span>
-          )}
+          <span className="truncate">{node.name}</span>
         </div>
 
-        <DropdownMenu>
+        {node.type === "folder" ? (
+          <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(event) => event.stopPropagation()}>
             <Button
               variant="ghost"
@@ -107,55 +80,25 @@ export function SidebarTreeNode({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            {node.type === "folder" ? (
-              <>
-                <DropdownMenuItem
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAddFile(node.id);
-                  }}
-                >
-                  <FilePlus className="mr-2 h-4 w-4" /> New File
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAddFolder(node.id);
-                  }}
-                >
-                  <FolderPlus className="mr-2 h-4 w-4" /> New Folder
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            ) : null}
             <DropdownMenuItem
               onClick={(event) => {
                 event.stopPropagation();
-                onStartRename(node.id, node.name);
+                onAddFile(node.id);
               }}
             >
-              <Edit2 className="mr-2 h-4 w-4" /> Rename
+              <FilePlus className="mr-2 h-4 w-4" /> New File
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(event) => {
                 event.stopPropagation();
-                onDuplicate(node.id);
+                onAddFolder(node.id);
               }}
             >
-              <Copy className="mr-2 h-4 w-4" /> Duplicate
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete(node.id);
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" /> Delete
+              <FolderPlus className="mr-2 h-4 w-4" /> New Folder
             </DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>
+          </DropdownMenu>
+        ) : null}
       </div>
 
       {node.type === "folder" && node.isOpen && node.children ? (
@@ -165,14 +108,7 @@ export function SidebarTreeNode({
               key={childNode.id}
               node={childNode}
               level={level + 1}
-              editingNodeId={editingNodeId}
-              editName={editName}
-              setEditName={setEditName}
               onToggleFolder={onToggleFolder}
-              onSubmitRename={onSubmitRename}
-              onStartRename={onStartRename}
-              onDuplicate={onDuplicate}
-              onDelete={onDelete}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
               onOpenFile={onOpenFile}

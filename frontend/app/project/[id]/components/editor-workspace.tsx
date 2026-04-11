@@ -21,9 +21,17 @@ import {
 } from "@/app/project/[id]/components/selection-action-popup";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 
-export function EditorWorkspace() {
+type EditorWorkspaceProps = {
+  projectId: string;
+};
+
+export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const router = useRouter();
   const theme = useThemeStore((state) => state.theme);
+  const projectName = useProjectEditorHook((state) => state.projectName);
+  const projectStatus = useProjectEditorHook((state) => state.projectStatus);
+  const projectErrorMessage = useProjectEditorHook((state) => state.projectErrorMessage);
+  const filesTree = useProjectEditorHook((state) => state.filesTree);
 
   const activeSidebarTab = useProjectEditorHook((state) => state.activeSidebarTab);
   const sidebarOpen = useProjectEditorHook((state) => state.sidebarOpen);
@@ -43,10 +51,9 @@ export function EditorWorkspace() {
   const setAiChatPrompt = useProjectEditorHook((state) => state.setAiChatPrompt);
   const submitAiChatPrompt = useProjectEditorHook((state) => state.submitAiChatPrompt);
   const initializeForViewport = useProjectEditorHook((state) => state.initializeForViewport);
+  const loadProject = useProjectEditorHook((state) => state.loadProject);
   const openFile = useProjectEditorHook((state) => state.openFile);
-  const createFile = useProjectEditorHook((state) => state.createFile);
-  const renameFile = useProjectEditorHook((state) => state.renameFile);
-  const deleteFile = useProjectEditorHook((state) => state.deleteFile);
+  const createEntry = useProjectEditorHook((state) => state.createEntry);
   const closeFile = useProjectEditorHook((state) => state.closeFile);
   const setActiveFile = useProjectEditorHook((state) => state.setActiveFile);
   const setActiveFileContent = useProjectEditorHook((state) => state.setActiveFileContent);
@@ -66,6 +73,10 @@ export function EditorWorkspace() {
   const findWidgetObserverRef = useRef<MutationObserver | null>(null);
   const isPointerSelectingRef = useRef(false);
   const isContentSelectionRef = useRef(false);
+
+  useEffect(() => {
+    void loadProject(projectId);
+  }, [loadProject, projectId]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 768px)");
@@ -295,19 +306,16 @@ export function EditorWorkspace() {
         <EditorSidebar
           activeSidebarTab={activeSidebarTab}
           sidebarOpen={sidebarOpen}
+          projectName={projectName}
+          files={filesTree}
           setSidebarOpen={setSidebarOpen}
           onOpenFile={(fileId, fileName) => {
             clearSelectionPopup();
             openFile(fileId, fileName);
           }}
-          onCreateFile={(fileId, fileName) => {
+          onCreateEntry={async (parentId, type) => {
             clearSelectionPopup();
-            createFile(fileId, fileName);
-          }}
-          onRenameFile={renameFile}
-          onDeleteFile={(fileId) => {
-            clearSelectionPopup();
-            deleteFile(fileId);
+            await createEntry(parentId, type);
           }}
         />
 
@@ -360,6 +368,16 @@ export function EditorWorkspace() {
                         onMount={handleEditorMount}
                         onChange={setActiveFileContent}
                       />
+                    </div>
+                  ) : projectStatus === "loading" ? (
+                    <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+                      Loading project...
+                    </div>
+                  ) : projectErrorMessage ? (
+                    <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+                      <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        {projectErrorMessage}
+                      </p>
                     </div>
                   ) : (
                     <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
