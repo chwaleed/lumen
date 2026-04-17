@@ -40,6 +40,7 @@ type ProjectEditorState = {
   openFiles: EditorFile[];
   activeFileId: string | null;
   fileContents: Record<string, string>;
+  savedFileContents: Record<string, string>;
   snapshotVersions: Record<string, number>;
   isAiChatExpanded: boolean;
   aiChatPrompt: string;
@@ -66,7 +67,7 @@ type ProjectEditorState = {
   setActiveFileContent: (value: string) => void;
   setFileContent: (fileId: string, value: string) => void;
   setFileSnapshotVersion: (fileId: string, version: number) => void;
-  saveActiveFile: () => void;
+  saveActiveFile: () => Promise<boolean>;
   cutSelection: () => Promise<void>;
   copySelection: () => Promise<void>;
   pasteSelection: () => Promise<void>;
@@ -164,6 +165,7 @@ function removeSnapshotVersions(snapshotVersions: Record<string, number>, entryI
 function initializeProjectState(project: ProjectDetail) {
   const tree = buildFileTree(project.files);
   const fileContents = createFileContents(project.files);
+  const savedFileContents = createFileContents(project.files);
   const snapshotVersions = createSnapshotVersions(project.files);
   const initialFile = findInitialOpenFile(project.files);
 
@@ -176,6 +178,7 @@ function initializeProjectState(project: ProjectDetail) {
     openFiles: initialFile ? [{ id: String(initialFile.id), name: initialFile.name }] : [],
     activeFileId: initialFile ? String(initialFile.id) : null,
     fileContents,
+    savedFileContents,
     snapshotVersions,
   };
 }
@@ -195,6 +198,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
   openFiles: [],
   activeFileId: null,
   fileContents: {},
+  savedFileContents: {},
   snapshotVersions: {},
   isAiChatExpanded: false,
   aiChatPrompt: "",
@@ -318,6 +322,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
             ...state.fileContents,
             [fileId]: newEntry.content ?? "",
           },
+          savedFileContents: {
+            ...state.savedFileContents,
+            [fileId]: newEntry.content ?? "",
+          },
           snapshotVersions: {
             ...state.snapshotVersions,
             [fileId]: newEntry.snapshot_version ?? 0,
@@ -334,6 +342,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         activeFileId: nextState.activeFileId,
         fileContents: {
           ...nextState.fileContents,
+          [fileId]: newEntry.content ?? "",
+        },
+        savedFileContents: {
+          ...state.savedFileContents,
           [fileId]: newEntry.content ?? "",
         },
         snapshotVersions: {
@@ -434,6 +446,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         openFiles: nextOpenFiles,
         activeFileId: isActiveFileDeleted ? (nextOpenFiles.at(-1)?.id ?? null) : state.activeFileId,
         fileContents: removeFileContents(state.fileContents, deletedEntryIds),
+        savedFileContents: removeFileContents(state.savedFileContents, deletedEntryIds),
         snapshotVersions: removeSnapshotVersions(state.snapshotVersions, deletedEntryIds),
         projectErrorMessage: null,
       };
@@ -495,29 +508,58 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         [fileId]: version,
       },
     })),
-  saveActiveFile: () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const { activeFileId, openFiles, fileContents } = get();
-    if (!activeFileId) {
-      return;
-    }
-
-    const activeFile = openFiles.find((file) => file.id === activeFileId);
-    if (!activeFile) {
-      return;
+  saveActiveFile: async () => {
+    const { activeFileId, fileContents, savedFileContents, snapshotVersions, projectId } = get();
+    if (!projectId || !activeFileId) {
+      return false;
     }
 
     const content = fileContents[activeFileId] ?? "";
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = activeFile.name;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const savedContent = savedFileContents[activeFileId] ?? "";
+    const baseVersion = snapshotVersions[activeFileId] ?? 0;
+
+    if (content === savedContent) {
+      return true;
+    }
+
+    const { status, payload } = await postApi<{
+      content: string;
+      version: number;
+    }>(`/api/projects/${projectId}/files/${activeFileId}/snapshots`, {
+      base_version: baseVersion,
+      changes: [
+        {
+          range_offset: 0,
+          range_length: savedContent.length,
+          text: content,
+        },
+      ],
+    });
+
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
+      set({
+        projectErrorMessage: payload.message ?? "Unable to save this file right now.",
+      });
+      return false;
+    }
+
+    set((state) => ({
+      fileContents: {
+        ...state.fileContents,
+        [activeFileId]: payload.data?.content ?? content,
+      },
+      savedFileContents: {
+        ...state.savedFileContents,
+        [activeFileId]: payload.data?.content ?? content,
+      },
+      snapshotVersions: {
+        ...state.snapshotVersions,
+        [activeFileId]: payload.data?.version ?? baseVersion,
+      },
+      projectErrorMessage: null,
+    }));
+
+    return true;
   },
   cutSelection: async () => {
     const editor = get().editorInstance;

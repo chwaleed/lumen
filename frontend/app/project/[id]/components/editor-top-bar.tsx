@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Code, Columns, Download, FileText, Moon, PanelLeft, Play, Sparkles, Sun, User } from "lucide-react";
+import { Code, Columns, Download, FileText, Moon, PanelLeft, Play, Save, Sparkles, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -118,7 +118,7 @@ export function EditorTopBar() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={saveActiveFile}>
+                  <DropdownMenuItem onClick={() => void saveActiveFile()}>
                     Save
                     <DropdownMenuShortcut>Ctrl+S</DropdownMenuShortcut>
                   </DropdownMenuItem>
@@ -217,6 +217,12 @@ export function EditorTopBar() {
         </div>
 
         <div className="flex items-center gap-2">
+          <TooltipAction label="Save file">
+            <Button variant="secondary" size="sm" className="hidden sm:inline-flex" onClick={() => void saveActiveFile()}>
+              <Save data-icon="inline-start" />
+              Save
+            </Button>
+          </TooltipAction>
           <TooltipAction label="Compile document">
             <Button variant="outline" size="sm" className="hidden sm:inline-flex">
               <Play data-icon="inline-start" />
