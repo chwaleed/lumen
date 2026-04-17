@@ -283,11 +283,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
     const name = getDefaultEntryName(filesTree, type);
 
     const { status, payload } = await postApi<ProjectFileEntry>(`/api/projects/${projectId}/files`, {
-        name,
-        type,
-        parent_id: parentId ? Number(parentId) : null,
-        mime_type: type === "file" ? "text/x-tex" : null,
-        content: type === "file" ? "" : null,
+      name,
+      type,
+      parent_id: parentId ? Number(parentId) : null,
+      mime_type: type === "file" ? "text/x-tex" : null,
     });
 
     if (status < 200 || status >= 300 || !payload.success || !payload.data) {
