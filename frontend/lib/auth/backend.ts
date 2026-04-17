@@ -1,3 +1,5 @@
+import axios from "axios";
+
 const DEFAULT_BACKEND_URL =
   process.env.ENVIRMENT === "development"
     ? "http://localhost:9000"
@@ -55,6 +57,13 @@ function getBackendUrl() {
   return process.env.BACKEND_URL ?? DEFAULT_BACKEND_URL;
 }
 
+const backendClient = axios.create({
+  validateStatus: () => true,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
 function getFallbackError<TData>(message: string): BackendApiResponse<TData> {
   return {
     success: false,
@@ -71,29 +80,23 @@ export async function fetchBackend<TData>(
   payload: BackendApiResponse<TData>;
 }> {
   try {
-    const response = await fetch(`${getBackendUrl()}${path}`, {
+    const response = await backendClient.request<BackendErrorPayload>({
+      url: `${getBackendUrl()}${path}`,
       method: options.method ?? "GET",
       headers: {
-        "Content-Type": "application/json",
         ...(options.accessToken
           ? {
               Authorization: `Bearer ${options.accessToken}`,
             }
           : {}),
       },
-      ...(options.body === undefined
-        ? {}
-        : {
-            body: JSON.stringify(options.body),
-          }),
-      cache: "no-store",
+      data: options.body,
     });
 
-    const rawPayload = (await response.json().catch(() => null)) as BackendErrorPayload | null;
     const payload: BackendApiResponse<TData> = {
-      success: rawPayload?.success ?? response.ok,
-      message: rawPayload?.message ?? "Request completed.",
-      data: (rawPayload?.data as TData | null | undefined) ?? null,
+      success: response.data?.success ?? response.status >= 200,
+      message: response.data?.message ?? "Request completed.",
+      data: (response.data?.data as TData | null | undefined) ?? null,
     };
 
     return {

@@ -7,7 +7,9 @@ export type ProjectFileEntry = {
   name: string;
   type: "file" | "folder";
   mime_type: string | null;
+  file_url: string | null;
   content: string | null;
+  snapshot_version: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -58,6 +60,14 @@ export function createFileContents(entries: ProjectFileEntry[]) {
     entries
       .filter((entry) => entry.type === "file")
       .map((entry) => [String(entry.id), entry.content ?? ""])
+  );
+}
+
+export function createSnapshotVersions(entries: ProjectFileEntry[]) {
+  return Object.fromEntries(
+    entries
+      .filter((entry) => entry.type === "file")
+      .map((entry) => [String(entry.id), entry.snapshot_version ?? 0])
   );
 }
 

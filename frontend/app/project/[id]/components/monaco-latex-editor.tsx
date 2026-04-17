@@ -5,11 +5,10 @@ type MonacoLatexEditorProps = {
   value: string;
   isDarkMode: boolean;
   wordWrap: boolean;
-  onChange: (value: string) => void;
   onMount: (editor: MonacoEditor.IStandaloneCodeEditor) => void;
 };
 
-export function MonacoLatexEditor({ value, isDarkMode, wordWrap, onChange, onMount }: MonacoLatexEditorProps) {
+export function MonacoLatexEditor({ value, isDarkMode, wordWrap, onMount }: MonacoLatexEditorProps) {
   return (
     <Editor
       height="100%"
@@ -53,7 +52,6 @@ export function MonacoLatexEditor({ value, isDarkMode, wordWrap, onChange, onMou
         });
       }}
       onMount={onMount}
-      onChange={(nextValue) => onChange(nextValue ?? "")}
       options={{
         wordWrap: wordWrap ? "on" : "off",
         fontSize: 14,

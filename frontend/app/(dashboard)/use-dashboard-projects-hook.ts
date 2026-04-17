@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { ProjectItem } from "@/app/(dashboard)/data/library-data";
+import { postApi, requestApi } from "@/lib/http/client";
 
 type BackendProject = {
   id: number;
@@ -91,78 +92,45 @@ export const useDashboardProjectsHook = create<DashboardProjectsState>()((set, g
 
     set({ fetchStatus: "loading", errorMessage: null });
 
-    try {
-      const response = await fetch("/api/projects", {
-        cache: "no-store",
-      });
-      const data = (await response.json()) as {
-        success?: boolean;
-        message?: string;
-        data?: BackendProject[];
-      };
+    const { status, payload } = await requestApi<BackendProject[]>("/api/projects");
 
-      if (!response.ok || !data.success) {
-        set({
-          fetchStatus: "error",
-          errorMessage: data.message ?? "Unable to load projects right now.",
-        });
-        return;
-      }
-
-      set({
-        projects: (data.data ?? []).map(mapProject),
-        fetchStatus: "loaded",
-        errorMessage: null,
-      });
-    } catch {
+    if (status < 200 || status >= 300 || !payload.success) {
       set({
         fetchStatus: "error",
-        errorMessage: "Unable to reach the projects service. Please try again.",
+        errorMessage: payload.message ?? "Unable to load projects right now.",
       });
+      return;
     }
+
+    set({
+      projects: (payload.data ?? []).map(mapProject),
+      fetchStatus: "loaded",
+      errorMessage: null,
+    });
   },
   createProject: async (options) => {
     set({ createStatus: "submitting", errorMessage: null });
 
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: options?.name ?? getDefaultProjectName(options?.templateId),
-          template_id: options?.templateId,
-        }),
-      });
-      const data = (await response.json()) as {
-        success?: boolean;
-        message?: string;
-        data?: BackendProject;
-      };
+    const { status, payload } = await postApi<BackendProject>("/api/projects", {
+      name: options?.name ?? getDefaultProjectName(options?.templateId),
+      template_id: options?.templateId,
+    });
 
-      if (!response.ok || !data.success || !data.data) {
-        set({
-          createStatus: "error",
-          errorMessage: data.message ?? "Unable to create a project right now.",
-        });
-        return null;
-      }
-
-      set((state) => ({
-        createStatus: "idle",
-        errorMessage: null,
-        fetchStatus: "loaded",
-        projects: [mapProject(data.data as BackendProject), ...state.projects],
-      }));
-
-      return String(data.data.id);
-    } catch {
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
       set({
         createStatus: "error",
-        errorMessage: "Unable to reach the project creation service. Please try again.",
+        errorMessage: payload.message ?? "Unable to create a project right now.",
       });
       return null;
     }
+
+    set((state) => ({
+      createStatus: "idle",
+      errorMessage: null,
+      fetchStatus: "loaded",
+      projects: [mapProject(payload.data as BackendProject), ...state.projects],
+    }));
+
+    return String(payload.data.id);
   },
 }));

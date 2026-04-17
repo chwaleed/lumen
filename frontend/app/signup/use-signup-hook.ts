@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { postApi } from "@/lib/http/client";
 
 type SignupStatus = "idle" | "submitting" | "success" | "error";
 
@@ -64,49 +65,31 @@ export const useSignupHook = create<SignupState>()((set, get) => ({
 
     set({ status: "submitting", message: null });
 
-    try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, email, password }),
-      });
+    const { status, payload } = await postApi<{ sessionEstablished?: boolean }>("/api/auth/signup", {
+      name,
+      email,
+      password,
+    });
 
-      const data = (await response.json()) as {
-        success?: boolean;
-        message?: string;
-        data?: {
-          sessionEstablished?: boolean;
-        };
-      };
-
-      if (!response.ok || !data.success) {
-        set({
-          status: "error",
-          message: data.message ?? "Unable to create account right now.",
-        });
-        return { success: false, sessionEstablished: false };
-      }
-
-      set({
-        status: "success",
-        message:
-          data.message ??
-          (data.data?.sessionEstablished
-            ? "Account created successfully."
-            : "Account created successfully. Please log in to continue."),
-      });
-      return {
-        success: true,
-        sessionEstablished: Boolean(data.data?.sessionEstablished),
-      };
-    } catch {
+    if (status < 200 || status >= 300 || !payload.success) {
       set({
         status: "error",
-        message: "Unable to reach signup service. Please try again.",
+        message: payload.message ?? "Unable to create account right now.",
       });
       return { success: false, sessionEstablished: false };
     }
+
+    set({
+      status: "success",
+      message:
+        payload.message ??
+        (payload.data?.sessionEstablished
+          ? "Account created successfully."
+          : "Account created successfully. Please log in to continue."),
+    });
+    return {
+      success: true,
+      sessionEstablished: Boolean(payload.data?.sessionEstablished),
+    };
   },
 }));

@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { postApi } from "@/lib/http/client";
 
 type LoginStatus = "idle" | "submitting" | "success" | "error";
 
@@ -41,38 +42,17 @@ export const useLoginHook = create<LoginState>()((set, get) => ({
 
     set({ status: "submitting", errorMessage: null });
 
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+    const { status, payload } = await postApi<null>("/api/auth/login", { email, password });
 
-      const data = (await response.json().catch(() => null)) as
-        | {
-            success?: boolean;
-            message?: string;
-          }
-        | null;
-
-      if (!response.ok || !data?.success) {
-        set({
-          status: "error",
-          errorMessage: data?.message ?? "Unable to log in right now.",
-        });
-        return false;
-      }
-
-      set({ status: "success", errorMessage: null });
-      return true;
-    } catch {
+    if (status < 200 || status >= 300 || !payload.success) {
       set({
         status: "error",
-        errorMessage: "Unable to reach the login service. Please try again.",
+        errorMessage: payload.message ?? "Unable to log in right now.",
       });
       return false;
     }
+
+    set({ status: "success", errorMessage: null });
+    return true;
   },
 }));

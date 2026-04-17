@@ -20,9 +20,22 @@ import {
   type SelectionPopupState,
 } from "@/app/project/[id]/components/selection-action-popup";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
+import { postApi } from "@/lib/http/client";
 
 type EditorWorkspaceProps = {
   projectId: string;
+};
+
+type PendingSnapshotChange = {
+  range_offset: number;
+  range_length: number;
+  text: string;
+};
+
+type PendingSnapshotBatch = {
+  baseVersion: number | null;
+  changes: PendingSnapshotChange[];
+  timeoutId: number | null;
 };
 
 export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
@@ -59,7 +72,6 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const deleteEntry = useProjectEditorHook((state) => state.deleteEntry);
   const closeFile = useProjectEditorHook((state) => state.closeFile);
   const setActiveFile = useProjectEditorHook((state) => state.setActiveFile);
-  const setActiveFileContent = useProjectEditorHook((state) => state.setActiveFileContent);
 
   const [isMobile, setIsMobile] = useState(false);
   const [panelContainerWidth, setPanelContainerWidth] = useState(0);
@@ -76,6 +88,7 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const findWidgetObserverRef = useRef<MutationObserver | null>(null);
   const isPointerSelectingRef = useRef(false);
   const isContentSelectionRef = useRef(false);
+  const pendingSnapshotBatchesRef = useRef<Map<string, PendingSnapshotBatch>>(new Map());
 
   useEffect(() => {
     void loadProject(projectId);
@@ -120,10 +133,18 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   }, []);
 
   useEffect(() => {
+    const pendingSnapshotBatches = pendingSnapshotBatchesRef.current;
+
     return () => {
       setEditorInstance(null);
       findWidgetObserverRef.current?.disconnect();
       findWidgetObserverRef.current = null;
+      pendingSnapshotBatches.forEach((batch) => {
+        if (batch.timeoutId !== null) {
+          window.clearTimeout(batch.timeoutId);
+        }
+      });
+      pendingSnapshotBatches.clear();
     };
   }, [setEditorInstance]);
 
@@ -164,6 +185,56 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
 
   const clearSelectionPopup = () => {
     setSelectionPopup((prev) => ({ ...prev, show: false }));
+  };
+
+  const flushSnapshotBatch = async (fileId: string) => {
+    const batch = pendingSnapshotBatchesRef.current.get(fileId);
+    if (!batch || batch.changes.length === 0) {
+      return;
+    }
+
+    pendingSnapshotBatchesRef.current.delete(fileId);
+
+    const { status, payload } = await postApi<{
+      content: string;
+      version: number;
+    }>(`/api/projects/${projectId}/files/${fileId}/snapshots`, {
+        base_version: batch.baseVersion,
+        changes: batch.changes,
+    });
+
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
+      return;
+    }
+
+    useProjectEditorHook.getState().setFileContent(fileId, payload.data.content);
+    useProjectEditorHook.getState().setFileSnapshotVersion(fileId, payload.data.version);
+  };
+
+  const queueSnapshotChange = (fileId: string, change: PendingSnapshotChange) => {
+    const batch = pendingSnapshotBatchesRef.current.get(fileId);
+
+    if (!batch) {
+      const currentSnapshotVersions = useProjectEditorHook.getState().snapshotVersions;
+      const nextBatch: PendingSnapshotBatch = {
+        baseVersion: currentSnapshotVersions[fileId] ?? null,
+        changes: [change],
+        timeoutId: window.setTimeout(() => {
+          void flushSnapshotBatch(fileId);
+        }, 500),
+      };
+      pendingSnapshotBatchesRef.current.set(fileId, nextBatch);
+      return;
+    }
+
+    if (batch.timeoutId !== null) {
+      window.clearTimeout(batch.timeoutId);
+    }
+
+    batch.changes.push(change);
+    batch.timeoutId = window.setTimeout(() => {
+      void flushSnapshotBatch(fileId);
+    }, 500);
   };
 
   const showSelectionPopup = (editor: MonacoEditor.IStandaloneCodeEditor) => {
@@ -232,6 +303,24 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
       attributeFilter: ["title", "data-title", "data-tooltip", "aria-label"],
     });
     findWidgetObserverRef.current = observer;
+
+    editor.onDidChangeModelContent((event) => {
+      const currentFileId = useProjectEditorHook.getState().activeFileId;
+      if (!currentFileId || event.isFlush) {
+        return;
+      }
+
+      const currentValue = editor.getValue();
+      useProjectEditorHook.getState().setFileContent(currentFileId, currentValue);
+
+      for (const change of event.changes) {
+        queueSnapshotChange(currentFileId, {
+          range_offset: change.rangeOffset,
+          range_length: change.rangeLength,
+          text: change.text,
+        });
+      }
+    });
 
     editor.onMouseDown((event) => {
       // Monaco overlay widgets (find/replace, context menus, etc.) should not trigger AI selection popup.
@@ -381,7 +470,6 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
                         isDarkMode={isDarkMode}
                         wordWrap={wordWrap}
                         onMount={handleEditorMount}
-                        onChange={setActiveFileContent}
                       />
                     </div>
                   ) : projectStatus === "loading" ? (

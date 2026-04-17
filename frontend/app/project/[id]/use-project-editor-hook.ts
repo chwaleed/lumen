@@ -4,9 +4,11 @@ import type { editor as MonacoEditor } from "monaco-editor";
 import { create } from "zustand";
 import { addNode, deleteNode, updateNode } from "@/components/editor-sidebar/file-tree-utils";
 import type { FileNode } from "@/components/editor-sidebar";
+import { postApi, requestApi } from "@/lib/http/client";
 import {
   buildFileTree,
   createFileContents,
+  createSnapshotVersions,
   findInitialOpenFile,
   type ProjectDetail,
   type ProjectFileEntry,
@@ -38,6 +40,7 @@ type ProjectEditorState = {
   openFiles: EditorFile[];
   activeFileId: string | null;
   fileContents: Record<string, string>;
+  snapshotVersions: Record<string, number>;
   isAiChatExpanded: boolean;
   aiChatPrompt: string;
   aiChatHistory: string[];
@@ -61,6 +64,8 @@ type ProjectEditorState = {
   closeFile: (fileId: string) => void;
   setActiveFile: (fileId: string) => void;
   setActiveFileContent: (value: string) => void;
+  setFileContent: (fileId: string, value: string) => void;
+  setFileSnapshotVersion: (fileId: string, version: number) => void;
   saveActiveFile: () => void;
   cutSelection: () => Promise<void>;
   copySelection: () => Promise<void>;
@@ -150,9 +155,16 @@ function removeFileContents(fileContents: Record<string, string>, entryIds: Set<
   );
 }
 
+function removeSnapshotVersions(snapshotVersions: Record<string, number>, entryIds: Set<string>) {
+  return Object.fromEntries(
+    Object.entries(snapshotVersions).filter(([fileId]) => !entryIds.has(fileId))
+  );
+}
+
 function initializeProjectState(project: ProjectDetail) {
   const tree = buildFileTree(project.files);
   const fileContents = createFileContents(project.files);
+  const snapshotVersions = createSnapshotVersions(project.files);
   const initialFile = findInitialOpenFile(project.files);
 
   return {
@@ -164,6 +176,7 @@ function initializeProjectState(project: ProjectDetail) {
     openFiles: initialFile ? [{ id: String(initialFile.id), name: initialFile.name }] : [],
     activeFileId: initialFile ? String(initialFile.id) : null,
     fileContents,
+    snapshotVersions,
   };
 }
 
@@ -182,6 +195,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
   openFiles: [],
   activeFileId: null,
   fileContents: {},
+  snapshotVersions: {},
   isAiChatExpanded: false,
   aiChatPrompt: "",
   aiChatHistory: [],
@@ -240,24 +254,17 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
     });
 
     try {
-      const response = await fetch(`/api/projects/${projectId}`, {
-        cache: "no-store",
-      });
-      const data = (await response.json()) as {
-        success?: boolean;
-        message?: string;
-        data?: ProjectDetail;
-      };
+      const { status, payload } = await requestApi<ProjectDetail>(`/api/projects/${projectId}`);
 
-      if (!response.ok || !data.success || !data.data) {
+      if (status < 200 || status >= 300 || !payload.success || !payload.data) {
         set({
           projectStatus: "error",
-          projectErrorMessage: data.message ?? "Unable to load this project right now.",
+          projectErrorMessage: payload.message ?? "Unable to load this project right now.",
         });
         return;
       }
 
-      set(initializeProjectState(data.data));
+      set(initializeProjectState(payload.data));
     } catch {
       set({
         projectStatus: "error",
@@ -275,34 +282,22 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
 
     const name = getDefaultEntryName(filesTree, type);
 
-    const response = await fetch(`/api/projects/${projectId}/files`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const { status, payload } = await postApi<ProjectFileEntry>(`/api/projects/${projectId}/files`, {
         name,
         type,
         parent_id: parentId ? Number(parentId) : null,
         mime_type: type === "file" ? "text/x-tex" : null,
         content: type === "file" ? "" : null,
-      }),
     });
 
-    const data = (await response.json()) as {
-      success?: boolean;
-      message?: string;
-      data?: ProjectFileEntry;
-    };
-
-    if (!response.ok || !data.success || !data.data) {
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
       set({
-        projectErrorMessage: data.message ?? "Unable to create a new entry right now.",
+        projectErrorMessage: payload.message ?? "Unable to create a new entry right now.",
       });
       return;
     }
 
-    const newEntry = data.data;
+    const newEntry = payload.data;
     const fileNode = createFileNode(newEntry);
 
     set((state) => {
@@ -324,7 +319,11 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
             ...state.fileContents,
             [fileId]: newEntry.content ?? "",
           },
-        } as ProjectEditorState,
+          snapshotVersions: {
+            ...state.snapshotVersions,
+            [fileId]: newEntry.snapshot_version ?? 0,
+          },
+        },
         fileId,
         newEntry.name
       );
@@ -338,6 +337,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
           ...nextState.fileContents,
           [fileId]: newEntry.content ?? "",
         },
+        snapshotVersions: {
+          ...state.snapshotVersions,
+          [fileId]: newEntry.snapshot_version ?? 0,
+        },
       };
     });
   },
@@ -348,29 +351,20 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       return false;
     }
 
-    const response = await fetch(`/api/projects/${projectId}`, {
+    const { status, payload } = await requestApi<{ name: string }>(`/api/projects/${projectId}`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name }),
+      body: { name },
     });
 
-    const data = (await response.json()) as {
-      success?: boolean;
-      message?: string;
-      data?: { name: string };
-    };
-
-    if (!response.ok || !data.success || !data.data) {
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
       set({
-        projectErrorMessage: data.message ?? "Unable to rename this project right now.",
+        projectErrorMessage: payload.message ?? "Unable to rename this project right now.",
       });
       return false;
     }
 
     set({
-      projectName: data.data.name,
+      projectName: payload.data.name,
       projectErrorMessage: null,
     });
     return true;
@@ -382,28 +376,19 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       return false;
     }
 
-    const response = await fetch(`/api/projects/${projectId}/files/${entryId}`, {
+    const { status, payload } = await requestApi<ProjectFileEntry>(`/api/projects/${projectId}/files/${entryId}`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name }),
+      body: { name },
     });
 
-    const data = (await response.json()) as {
-      success?: boolean;
-      message?: string;
-      data?: ProjectFileEntry;
-    };
-
-    if (!response.ok || !data.success || !data.data) {
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
       set({
-        projectErrorMessage: data.message ?? "Unable to rename this entry right now.",
+        projectErrorMessage: payload.message ?? "Unable to rename this entry right now.",
       });
       return false;
     }
 
-    const renamedEntry = data.data;
+    const renamedEntry = payload.data;
 
     set((state) => ({
       filesTree: updateNode(state.filesTree, entryId, (node) => ({
@@ -430,18 +415,13 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       return false;
     }
 
-    const response = await fetch(`/api/projects/${projectId}/files/${entryId}`, {
+    const { status, payload } = await requestApi<null>(`/api/projects/${projectId}/files/${entryId}`, {
       method: "DELETE",
     });
 
-    const data = (await response.json()) as {
-      success?: boolean;
-      message?: string;
-    };
-
-    if (!response.ok || !data.success) {
+    if (status < 200 || status >= 300 || !payload.success) {
       set({
-        projectErrorMessage: data.message ?? "Unable to delete this entry right now.",
+        projectErrorMessage: payload.message ?? "Unable to delete this entry right now.",
       });
       return false;
     }
@@ -455,6 +435,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         openFiles: nextOpenFiles,
         activeFileId: isActiveFileDeleted ? (nextOpenFiles.at(-1)?.id ?? null) : state.activeFileId,
         fileContents: removeFileContents(state.fileContents, deletedEntryIds),
+        snapshotVersions: removeSnapshotVersions(state.snapshotVersions, deletedEntryIds),
         projectErrorMessage: null,
       };
     });
@@ -501,6 +482,20 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         },
       };
     }),
+  setFileContent: (fileId, value) =>
+    set((state) => ({
+      fileContents: {
+        ...state.fileContents,
+        [fileId]: value,
+      },
+    })),
+  setFileSnapshotVersion: (fileId, version) =>
+    set((state) => ({
+      snapshotVersions: {
+        ...state.snapshotVersions,
+        [fileId]: version,
+      },
+    })),
   saveActiveFile: () => {
     if (typeof window === "undefined") {
       return;

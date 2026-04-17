@@ -6,6 +6,7 @@ import { DashboardSidebar, type DashboardTab } from "@/app/(dashboard)/component
 import { ProjectsHeader } from "@/app/(dashboard)/components/projects-header";
 import { useDashboardLayoutHook } from "@/app/(dashboard)/use-dashboard-layout-hook";
 import { useDashboardProjectsHook } from "@/app/(dashboard)/use-dashboard-projects-hook";
+import { postApi } from "@/lib/http/client";
 import { useThemeStore } from "@/lib/stores/theme-store";
 
 type DashboardShellProps = {
@@ -82,9 +83,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const handleLogout = () => {
     startTransition(() => {
       void (async () => {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-        });
+        await postApi<null>("/api/auth/logout", {});
         router.push("/login");
         router.refresh();
       })();
