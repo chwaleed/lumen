@@ -20,6 +20,7 @@
  * Learn more: See SKILL.md Common Patterns section
  */
 
+import axios from 'axios'
 import { create } from 'zustand'
 
 interface User {
@@ -33,6 +34,27 @@ interface Post {
   title: string
   body: string
   userId: string
+}
+
+type CreatePostInput = Omit<Post, 'id'>
+
+const apiClient = axios.create({
+  baseURL: 'https://api.example.com',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    return error.message
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return fallback
 }
 
 interface AsyncStore {
@@ -53,7 +75,7 @@ interface AsyncStore {
   // Actions
   fetchUser: (userId: string) => Promise<void>
   fetchPosts: (userId: string) => Promise<void>
-  createPost: (post: Omit<Post, 'id'>) => Promise<void>
+  createPost: (post: CreatePostInput) => Promise<void>
   deletePost: (postId: string) => Promise<void>
   reset: () => void
 }
@@ -74,17 +96,11 @@ export const useAsyncStore = create<AsyncStore>()((set, get) => ({
     set({ isLoadingUser: true, userError: null })
 
     try {
-      const response = await fetch(`https://api.example.com/users/${userId}`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch user: ${response.statusText}`)
-      }
-
-      const user = await response.json()
-      set({ user, isLoadingUser: false })
+      const response = await apiClient.get<User>(`/users/${userId}`)
+      set({ user: response.data, isLoadingUser: false })
     } catch (error) {
       set({
-        userError: (error as Error).message,
+        userError: getErrorMessage(error, 'Failed to fetch user.'),
         isLoadingUser: false,
         user: null,
       })
@@ -96,17 +112,11 @@ export const useAsyncStore = create<AsyncStore>()((set, get) => ({
     set({ isLoadingPosts: true, postsError: null })
 
     try {
-      const response = await fetch(`https://api.example.com/users/${userId}/posts`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch posts: ${response.statusText}`)
-      }
-
-      const posts = await response.json()
-      set({ posts, isLoadingPosts: false })
+      const response = await apiClient.get<Post[]>(`/users/${userId}/posts`)
+      set({ posts: response.data, isLoadingPosts: false })
     } catch (error) {
       set({
-        postsError: (error as Error).message,
+        postsError: getErrorMessage(error, 'Failed to fetch posts.'),
         isLoadingPosts: false,
       })
     }
@@ -125,17 +135,8 @@ export const useAsyncStore = create<AsyncStore>()((set, get) => ({
     }))
 
     try {
-      const response = await fetch('https://api.example.com/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(post),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to create post: ${response.statusText}`)
-      }
-
-      const savedPost = await response.json()
+      const response = await apiClient.post<Post>('/posts', post)
+      const savedPost = response.data
 
       // Replace optimistic post with real one
       set((state) => ({
@@ -148,7 +149,7 @@ export const useAsyncStore = create<AsyncStore>()((set, get) => ({
       // Rollback optimistic update
       set((state) => ({
         posts: state.posts.filter((p) => p.id !== tempId),
-        saveError: (error as Error).message,
+        saveError: getErrorMessage(error, 'Failed to create post.'),
         isSavingPost: false,
       }))
     }
@@ -162,21 +163,16 @@ export const useAsyncStore = create<AsyncStore>()((set, get) => ({
     // Optimistic update
     set((state) => ({
       posts: state.posts.filter((p) => p.id !== postId),
+      saveError: null,
     }))
 
     try {
-      const response = await fetch(`https://api.example.com/posts/${postId}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete post: ${response.statusText}`)
-      }
+      await apiClient.delete(`/posts/${postId}`)
     } catch (error) {
       // Rollback on error
       set({
         posts: originalPosts,
-        saveError: (error as Error).message,
+        saveError: getErrorMessage(error, 'Failed to delete post.'),
       })
     }
   },
@@ -293,13 +289,13 @@ export const useAsyncStore = create<AsyncStore>()((set, get) => ({
  *   set({ isLoadingUser: true, userError: null })
  *
  *   try {
- *     const response = await fetch(
- *       `https://api.example.com/users/${userId}`,
+ *     const response = await apiClient.get<User>(
+ *       `/users/${userId}`,
  *       { signal: abortController.signal }
  *     )
- *     // ... rest of fetch logic
+ *     set({ user: response.data, isLoadingUser: false })
  *   } catch (error) {
- *     if (error.name === 'AbortError') {
+ *     if (axios.isAxiosError(error) && error.code === 'ERR_CANCELED') {
  *       // Request was cancelled
  *       return
  *     }

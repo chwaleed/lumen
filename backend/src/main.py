@@ -13,6 +13,7 @@ from src.core.config import Settings, get_settings
 from src.core.observability import register_observability
 from src.db.session import init_db
 from src.file_entries.router import router as file_entries_router
+from src.file_snapshots.router import router as file_snapshots_router
 from src.projects.router import router as projects_router
 
 
@@ -36,6 +37,7 @@ def create_app(*, settings: Settings | None = None, init_db_on_startup: bool = T
     app.include_router(auth_router)
     app.include_router(projects_router)
     app.include_router(file_entries_router)
+    app.include_router(file_snapshots_router)
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_: Request, exc: HTTPException):

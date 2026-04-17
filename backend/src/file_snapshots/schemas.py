@@ -12,3 +12,14 @@ class FileSnapshotResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class MonacoContentChange(BaseModel):
+    range_offset: int
+    range_length: int
+    text: str
+
+
+class FileSnapshotCreateRequest(BaseModel):
+    base_version: int | None = None
+    changes: list[MonacoContentChange]

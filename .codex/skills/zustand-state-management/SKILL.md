@@ -334,13 +334,17 @@ const count = useStore((state) => state.items.length)  // Computed on read
 
 **Async Actions**:
 ```typescript
+import axios from 'axios'
+
+const apiClient = axios.create({ baseURL: '/api' })
+
 const useAsyncStore = create<AsyncStore>()((set) => ({
   data: null,
   isLoading: false,
   fetchData: async () => {
     set({ isLoading: true })
-    const response = await fetch('/api/data')
-    set({ data: await response.text(), isLoading: false })
+    const response = await apiClient.get<string>('/data')
+    set({ data: response.data, isLoading: false })
   },
 }))
 ```

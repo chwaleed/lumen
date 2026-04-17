@@ -7,7 +7,7 @@ from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
 from src.core.api_response import ApiResponse, ApiResponseBuilder
 from src.db.session import get_session
-from src.file_entries.schemas import FileEntryResponse
+from src.file_entries.service import serialize_file_entry
 from src.projects.schemas import ProjectCreateRequest, ProjectDetailResponse, ProjectSummaryResponse, ProjectUpdateRequest
 from src.projects.service import create_project, get_project_detail, list_projects, update_project
 
@@ -41,7 +41,7 @@ def get_project(project_id: int, current_user: CurrentUser, session: DbSession) 
     return ApiResponseBuilder.success(
         data=ProjectDetailResponse(
             **ProjectSummaryResponse.model_validate(project).model_dump(),
-            files=[FileEntryResponse.model_validate(file_entry) for file_entry in files],
+            files=[serialize_file_entry(session, file_entry) for file_entry in files],
         ).model_dump(),
         message="Project fetched successfully.",
     )
@@ -59,4 +59,3 @@ def patch_project(
         data=ProjectSummaryResponse.model_validate(project).model_dump(),
         message="Project renamed successfully.",
     )
-

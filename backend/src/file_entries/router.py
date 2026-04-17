@@ -8,7 +8,7 @@ from src.auth.models import User
 from src.core.api_response import ApiResponse, ApiResponseBuilder
 from src.db.session import get_session
 from src.file_entries.schemas import FileEntryCreateRequest, FileEntryResponse, FileEntryUpdateRequest
-from src.file_entries.service import create_file_entry, delete_file_entry, update_file_entry
+from src.file_entries.service import create_file_entry, delete_file_entry, serialize_file_entry, update_file_entry
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -25,7 +25,7 @@ def post_project_file(
 ) -> ApiResponse:
     file_entry = create_file_entry(session, current_user, project_id, payload)
     return ApiResponseBuilder.success(
-        data=FileEntryResponse.model_validate(file_entry).model_dump(),
+        data=serialize_file_entry(session, file_entry).model_dump(),
         message="File created successfully." if payload.type == "file" else "Folder created successfully.",
     )
 
@@ -40,7 +40,7 @@ def patch_project_file(
 ) -> ApiResponse:
     file_entry = update_file_entry(session, current_user, project_id, file_entry_id, payload)
     return ApiResponseBuilder.success(
-        data=FileEntryResponse.model_validate(file_entry).model_dump(),
+        data=serialize_file_entry(session, file_entry).model_dump(),
         message="Folder renamed successfully." if file_entry.type == "folder" else "File renamed successfully.",
     )
 

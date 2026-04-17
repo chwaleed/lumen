@@ -3,8 +3,8 @@ from sqlmodel import Session, select
 
 from src.auth.models import User
 from src.file_entries.models import FileEntry
-from src.file_entries.schemas import FileEntryCreateRequest, FileEntryUpdateRequest
-from src.file_snapshots.service import create_file_snapshot
+from src.file_entries.schemas import FileEntryCreateRequest, FileEntryResponse, FileEntryUpdateRequest
+from src.file_snapshots.service import create_file_snapshot, get_latest_file_snapshot
 from src.projects.models import Project
 from src.shared.project_access import clean_name, get_project_for_user, projects_exception, touch_project
 
@@ -53,6 +53,23 @@ def list_project_files(session: Session, project: Project) -> list[FileEntry]:
     return list(session.exec(statement).all())
 
 
+def serialize_file_entry(session: Session, file_entry: FileEntry) -> FileEntryResponse:
+    latest_snapshot = get_latest_file_snapshot(session, file_entry.id)
+    return FileEntryResponse(
+        id=file_entry.id,
+        project_id=file_entry.project_id,
+        parent_id=file_entry.parent_id,
+        name=file_entry.name,
+        type=file_entry.type,
+        mime_type=file_entry.mime_type,
+        file_url=file_entry.file_url,
+        content=None if latest_snapshot is None else latest_snapshot.content,
+        snapshot_version=None if latest_snapshot is None else latest_snapshot.version,
+        created_at=file_entry.created_at,
+        updated_at=file_entry.updated_at,
+    )
+
+
 def create_file_entry(
     session: Session,
     current_user: User,
@@ -80,9 +97,6 @@ def create_file_entry(
     )
     session.add(file_entry)
     session.flush()
-
-    if payload.type == "file" and payload.content is not None:
-        create_file_snapshot(session, file_entry.id, payload.content)
 
     touch_project(session, project)
     session.commit()

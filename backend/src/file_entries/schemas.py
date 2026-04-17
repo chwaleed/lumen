@@ -26,5 +26,7 @@ class FileEntryResponse(BaseModel):
     type: Literal["file", "folder"]
     mime_type: str | None
     file_url: str | None
+    content: str | None = None
+    snapshot_version: int | None = None
     created_at: datetime
     updated_at: datetime
