@@ -40,7 +40,7 @@ interface DashboardSidebarProps {
     <div
       className={`${isMobile ? 'absolute z-30 shadow-xl' : 'relative'} ${
         isMobile && !sidebarOpen ? 'hidden' : 'flex'
-      } w-[300px] border-r bg-background flex-col h-full transition-all`}
+      } w-75 border-r bg-background flex-col h-full transition-all`}
     >
       <div className="h-20 px-6 flex items-center gap-2.5 text-foreground border-b">
         <Sparkles className="h-5 w-5" />

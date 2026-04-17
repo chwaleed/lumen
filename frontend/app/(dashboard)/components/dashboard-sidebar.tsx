@@ -56,7 +56,7 @@ export function DashboardSidebar({
     : "relative flex";
 
   return (
-    <aside className={`${containerVisibility} h-full w-64 flex-col border-r bg-card/30`}>
+    <aside className={`${containerVisibility} h-screen w-64 flex-col border-r bg-card/30`}>
       <div className="flex items-center gap-2 border-b px-6 py-5 text-primary">
         <Sparkles className="size-5" />
         <span className="text-xl font-semibold tracking-tight">TexAI</span>
