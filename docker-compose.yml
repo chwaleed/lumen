@@ -36,6 +36,20 @@ services:
     networks:
       - lumen-net
 
+  adminer:
+    image: adminer:5.4.2
+    container_name: lumen-adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - lumen-net
+
   frontend:
     build:
       context: ./frontend
