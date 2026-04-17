@@ -240,6 +240,14 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
 
       const currentValue = editor.getValue();
       useProjectEditorHook.getState().setFileContent(currentFileId, currentValue);
+      useProjectEditorHook.getState().appendPendingSnapshotChanges(
+        currentFileId,
+        event.changes.map((change) => ({
+          range_offset: change.rangeOffset,
+          range_length: change.rangeLength,
+          text: change.text,
+        }))
+      );
     });
 
     editor.onMouseDown((event) => {

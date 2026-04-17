@@ -21,6 +21,12 @@ export type EditorFile = {
   name: string;
 };
 
+export type PendingSnapshotChange = {
+  range_offset: number;
+  range_length: number;
+  text: string;
+};
+
 type LoadStatus = "idle" | "loading" | "loaded" | "error";
 
 type CreateEntryType = "file" | "folder";
@@ -41,6 +47,7 @@ type ProjectEditorState = {
   activeFileId: string | null;
   fileContents: Record<string, string>;
   savedFileContents: Record<string, string>;
+  pendingSnapshotChanges: Record<string, PendingSnapshotChange[]>;
   snapshotVersions: Record<string, number>;
   isAiChatExpanded: boolean;
   aiChatPrompt: string;
@@ -65,6 +72,7 @@ type ProjectEditorState = {
   closeFile: (fileId: string) => void;
   setActiveFile: (fileId: string) => void;
   setActiveFileContent: (value: string) => void;
+  appendPendingSnapshotChanges: (fileId: string, changes: PendingSnapshotChange[]) => void;
   setFileContent: (fileId: string, value: string) => void;
   setFileSnapshotVersion: (fileId: string, version: number) => void;
   saveActiveFile: () => Promise<boolean>;
@@ -156,6 +164,15 @@ function removeFileContents(fileContents: Record<string, string>, entryIds: Set<
   );
 }
 
+function removePendingSnapshotChanges(
+  pendingSnapshotChanges: Record<string, PendingSnapshotChange[]>,
+  entryIds: Set<string>
+) {
+  return Object.fromEntries(
+    Object.entries(pendingSnapshotChanges).filter(([fileId]) => !entryIds.has(fileId))
+  );
+}
+
 function removeSnapshotVersions(snapshotVersions: Record<string, number>, entryIds: Set<string>) {
   return Object.fromEntries(
     Object.entries(snapshotVersions).filter(([fileId]) => !entryIds.has(fileId))
@@ -179,6 +196,7 @@ function initializeProjectState(project: ProjectDetail) {
     activeFileId: initialFile ? String(initialFile.id) : null,
     fileContents,
     savedFileContents,
+    pendingSnapshotChanges: {},
     snapshotVersions,
   };
 }
@@ -199,6 +217,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
   activeFileId: null,
   fileContents: {},
   savedFileContents: {},
+  pendingSnapshotChanges: {},
   snapshotVersions: {},
   isAiChatExpanded: false,
   aiChatPrompt: "",
@@ -326,6 +345,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
             ...state.savedFileContents,
             [fileId]: newEntry.content ?? "",
           },
+          pendingSnapshotChanges: {
+            ...state.pendingSnapshotChanges,
+            [fileId]: [],
+          },
           snapshotVersions: {
             ...state.snapshotVersions,
             [fileId]: newEntry.snapshot_version ?? 0,
@@ -347,6 +370,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         savedFileContents: {
           ...state.savedFileContents,
           [fileId]: newEntry.content ?? "",
+        },
+        pendingSnapshotChanges: {
+          ...state.pendingSnapshotChanges,
+          [fileId]: [],
         },
         snapshotVersions: {
           ...state.snapshotVersions,
@@ -447,6 +474,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         activeFileId: isActiveFileDeleted ? (nextOpenFiles.at(-1)?.id ?? null) : state.activeFileId,
         fileContents: removeFileContents(state.fileContents, deletedEntryIds),
         savedFileContents: removeFileContents(state.savedFileContents, deletedEntryIds),
+        pendingSnapshotChanges: removePendingSnapshotChanges(state.pendingSnapshotChanges, deletedEntryIds),
         snapshotVersions: removeSnapshotVersions(state.snapshotVersions, deletedEntryIds),
         projectErrorMessage: null,
       };
@@ -494,6 +522,13 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         },
       };
     }),
+  appendPendingSnapshotChanges: (fileId, changes) =>
+    set((state) => ({
+      pendingSnapshotChanges: {
+        ...state.pendingSnapshotChanges,
+        [fileId]: [...(state.pendingSnapshotChanges[fileId] ?? []), ...changes],
+      },
+    })),
   setFileContent: (fileId, value) =>
     set((state) => ({
       fileContents: {
@@ -509,13 +544,14 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       },
     })),
   saveActiveFile: async () => {
-    const { activeFileId, fileContents, savedFileContents, snapshotVersions, projectId } = get();
+    const { activeFileId, fileContents, savedFileContents, pendingSnapshotChanges, snapshotVersions, projectId } = get();
     if (!projectId || !activeFileId) {
       return false;
     }
 
     const content = fileContents[activeFileId] ?? "";
     const savedContent = savedFileContents[activeFileId] ?? "";
+    const changes = pendingSnapshotChanges[activeFileId] ?? [];
     const baseVersion = snapshotVersions[activeFileId] ?? 0;
 
     if (content === savedContent) {
@@ -527,13 +563,16 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       version: number;
     }>(`/api/projects/${projectId}/files/${activeFileId}/snapshots`, {
       base_version: baseVersion,
-      changes: [
-        {
-          range_offset: 0,
-          range_length: savedContent.length,
-          text: content,
-        },
-      ],
+      changes:
+        changes.length > 0
+          ? changes
+          : [
+              {
+                range_offset: 0,
+                range_length: savedContent.length,
+                text: content,
+              },
+            ],
     });
 
     if (status < 200 || status >= 300 || !payload.success || !payload.data) {
@@ -551,6 +590,10 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       savedFileContents: {
         ...state.savedFileContents,
         [activeFileId]: payload.data?.content ?? content,
+      },
+      pendingSnapshotChanges: {
+        ...state.pendingSnapshotChanges,
+        [activeFileId]: [],
       },
       snapshotVersions: {
         ...state.snapshotVersions,

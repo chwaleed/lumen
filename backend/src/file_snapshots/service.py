@@ -27,17 +27,21 @@ def create_file_snapshot(session: Session, file_id: int, content: str) -> FileSn
     return snapshot
 
 
+def apply_monaco_change(content: str, change: MonacoContentChange) -> str:
+    start_index = change.range_offset
+    end_index = change.range_offset + change.range_length
+
+    if start_index < 0 or end_index < start_index or end_index > len(content):
+        raise projects_exception("Invalid editor change range.", status.HTTP_400_BAD_REQUEST)
+
+    return f"{content[:start_index]}{change.text}{content[end_index:]}"
+
+
 def apply_monaco_changes(content: str, changes: list[MonacoContentChange]) -> str:
     next_content = content
 
     for change in changes:
-        start_index = change.range_offset
-        end_index = change.range_offset + change.range_length
-
-        if start_index < 0 or end_index < start_index or end_index > len(next_content):
-            raise projects_exception("Invalid editor change range.", status.HTTP_400_BAD_REQUEST)
-
-        next_content = f"{next_content[:start_index]}{change.text}{next_content[end_index:]}"
+        next_content = apply_monaco_change(next_content, change)
 
     return next_content
 
@@ -59,7 +63,8 @@ def create_file_snapshot_from_monaco_changes(
     if base_version is not None and base_version != latest_version:
         raise projects_exception("Snapshot version conflict. Refresh and try again.", status.HTTP_409_CONFLICT)
 
-    return create_file_snapshot(session, file_id, apply_monaco_changes(latest_content, changes))
+    updated_content = apply_monaco_changes(latest_content, changes)
+    return create_file_snapshot(session, file_id, updated_content)
 
 
 def list_file_snapshots(session: Session, file_id: int) -> list[FileSnapshot]:
