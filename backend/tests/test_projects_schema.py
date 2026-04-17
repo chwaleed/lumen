@@ -8,7 +8,8 @@ from sqlmodel import Session, select
 from src.auth.models import User
 from src.core.config import Settings
 from src.db.session import _engines, get_engine, init_db
-from src.projects.models import FileEntry, Project
+from src.file_entries.models import FileEntry
+from src.projects.models import Project
 
 
 @pytest.fixture()

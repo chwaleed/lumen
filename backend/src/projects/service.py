@@ -1,15 +1,12 @@
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlmodel import Session, select
 
 from src.auth.models import User
-from src.core.security import utc_now
-from src.projects.models import FileEntry, Project
-from src.projects.schemas import (
-    FileEntryCreateRequest,
-    FileEntryUpdateRequest,
-    ProjectCreateRequest,
-    ProjectUpdateRequest,
-)
+from src.file_entries.models import FileEntry
+from src.file_entries.service import create_default_project_files, create_project_reference_file, list_project_files
+from src.projects.models import Project
+from src.projects.schemas import ProjectCreateRequest, ProjectUpdateRequest
+from src.shared.project_access import clean_name, get_project_for_user, touch_project
 
 DEFAULT_TEMPLATE_ID = "blank"
 
@@ -124,74 +121,10 @@ Write your letter here.
 \\end{document}
 """,
 }
-
-
-def _projects_exception(detail: str, status_code: int = status.HTTP_400_BAD_REQUEST) -> HTTPException:
-    return HTTPException(status_code=status_code, detail=detail)
-
-
-def _clean_name(name: str, *, field_name: str) -> str:
-    clean_name = name.strip()
-    if not clean_name:
-        raise _projects_exception(f"{field_name} cannot be empty.")
-    return clean_name
-
-
-def _get_project_for_user(session: Session, current_user: User, project_id: int) -> Project:
-    statement = select(Project).where(Project.id == project_id, Project.user_id == current_user.id)
-    project = session.exec(statement).first()
-    if project is None:
-        raise _projects_exception("Project not found.", status.HTTP_404_NOT_FOUND)
-    return project
-
-
 def _get_template_content(template_id: str | None) -> str:
     if template_id is None:
         return DEFAULT_PROJECT_TEMPLATES[DEFAULT_TEMPLATE_ID]
     return DEFAULT_PROJECT_TEMPLATES.get(template_id, DEFAULT_PROJECT_TEMPLATES[DEFAULT_TEMPLATE_ID])
-
-
-def _touch_project(session: Session, project: Project) -> None:
-    project.updated_at = utc_now()
-    session.add(project)
-
-
-def _delete_file_entry_tree(session: Session, file_entry: FileEntry) -> None:
-    child_entries = list(
-        session.exec(select(FileEntry).where(FileEntry.parent_id == file_entry.id)).all()
-    )
-
-    for child_entry in child_entries:
-        _delete_file_entry_tree(session, child_entry)
-
-    session.delete(file_entry)
-
-
-def _create_default_project_files(session: Session, project: Project, template_id: str | None) -> None:
-    main_file = FileEntry(
-        project_id=project.id,
-        name="main.tex",
-        type="file",
-        mime_type="text/x-tex",
-        content=_get_template_content(template_id),
-    )
-    session.add(main_file)
-
-    if template_id == "academic":
-        session.add(
-            FileEntry(
-                project_id=project.id,
-                name="references.bib",
-                type="file",
-                mime_type="text/plain",
-                content="""@article{lumen2026,
-  title={Lumen Reference},
-  author={Doe, Jane},
-  journal={Journal of LaTeX},
-  year={2026}
-}""",
-            )
-        )
 
 
 def list_projects(session: Session, current_user: User) -> list[Project]:
@@ -205,106 +138,40 @@ def list_projects(session: Session, current_user: User) -> list[Project]:
 
 def create_project(session: Session, current_user: User, payload: ProjectCreateRequest) -> Project:
     project = Project(
-        name=_clean_name(payload.name, field_name="Project name"),
+        name=clean_name(payload.name, field_name="Project name"),
         user_id=current_user.id,
     )
     session.add(project)
     session.commit()
     session.refresh(project)
 
-    _create_default_project_files(session, project, payload.template_id)
-    _touch_project(session, project)
+    create_default_project_files(session, project, _get_template_content(payload.template_id))
+    if payload.template_id == "academic":
+        create_project_reference_file(
+            session,
+            project,
+            """@article{lumen2026,
+  title={Lumen Reference},
+  author={Doe, Jane},
+  journal={Journal of LaTeX},
+  year={2026}
+}""",
+        )
+    touch_project(session, project)
     session.commit()
     session.refresh(project)
     return project
 
 
 def update_project(session: Session, current_user: User, project_id: int, payload: ProjectUpdateRequest) -> Project:
-    project = _get_project_for_user(session, current_user, project_id)
-    project.name = _clean_name(payload.name, field_name="Project name")
-    _touch_project(session, project)
+    project = get_project_for_user(session, current_user, project_id)
+    project.name = clean_name(payload.name, field_name="Project name")
+    touch_project(session, project)
     session.commit()
     session.refresh(project)
     return project
 
 
-def list_project_files(session: Session, project: Project) -> list[FileEntry]:
-    statement = (
-        select(FileEntry)
-        .where(FileEntry.project_id == project.id)
-        .order_by(FileEntry.parent_id.asc(), FileEntry.type.asc(), FileEntry.name.asc(), FileEntry.id.asc())
-    )
-    return list(session.exec(statement).all())
-
-
 def get_project_detail(session: Session, current_user: User, project_id: int) -> tuple[Project, list[FileEntry]]:
-    project = _get_project_for_user(session, current_user, project_id)
+    project = get_project_for_user(session, current_user, project_id)
     return project, list_project_files(session, project)
-
-
-def create_file_entry(
-    session: Session,
-    current_user: User,
-    project_id: int,
-    payload: FileEntryCreateRequest,
-) -> FileEntry:
-    project = _get_project_for_user(session, current_user, project_id)
-    clean_name = _clean_name(payload.name, field_name="File name")
-
-    parent_id = payload.parent_id
-    if parent_id is not None:
-        parent_entry = session.get(FileEntry, parent_id)
-        if parent_entry is None or parent_entry.project_id != project.id:
-            raise _projects_exception("Parent folder not found.", status.HTTP_404_NOT_FOUND)
-        if parent_entry.type != "folder":
-            raise _projects_exception("Files can only be created inside folders.", status.HTTP_400_BAD_REQUEST)
-
-    file_entry = FileEntry(
-        project_id=project.id,
-        parent_id=parent_id,
-        name=clean_name,
-        type=payload.type,
-        mime_type=payload.mime_type if payload.type == "file" else None,
-        content=payload.content if payload.type == "file" else None,
-    )
-    session.add(file_entry)
-    _touch_project(session, project)
-    session.commit()
-    session.refresh(file_entry)
-    return file_entry
-
-
-def update_file_entry(
-    session: Session,
-    current_user: User,
-    project_id: int,
-    file_entry_id: int,
-    payload: FileEntryUpdateRequest,
-) -> FileEntry:
-    project = _get_project_for_user(session, current_user, project_id)
-    file_entry = session.get(FileEntry, file_entry_id)
-
-    if file_entry is None or file_entry.project_id != project.id:
-        raise _projects_exception("File entry not found.", status.HTTP_404_NOT_FOUND)
-
-    file_entry.name = _clean_name(
-        payload.name,
-        field_name="Folder name" if file_entry.type == "folder" else "File name",
-    )
-    session.add(file_entry)
-    _touch_project(session, project)
-    session.commit()
-    session.refresh(file_entry)
-    return file_entry
-
-
-def delete_file_entry(session: Session, current_user: User, project_id: int, file_entry_id: int) -> None:
-    project = _get_project_for_user(session, current_user, project_id)
-    file_entry = session.get(FileEntry, file_entry_id)
-
-    if file_entry is None or file_entry.project_id != project.id:
-        raise _projects_exception("File entry not found.", status.HTTP_404_NOT_FOUND)
-
-    _delete_file_entry_tree(session, file_entry)
-    _touch_project(session, project)
-    session.commit()
