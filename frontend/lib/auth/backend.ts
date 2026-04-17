@@ -1,4 +1,7 @@
-const DEFAULT_BACKEND_URL = "http://backend:9000";
+const DEFAULT_BACKEND_URL =
+  process.env.ENVIRMENT === "development"
+    ? "http://localhost:9000"
+    : "http://backend:9000";
 
 type BackendErrorPayload = {
   success?: boolean;

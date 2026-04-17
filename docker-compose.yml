@@ -29,6 +29,11 @@ services:
     environment:
       PORT: ${BACKEND_PORT:-9000}
       POSTGRES_CONNECTION_STRING: ${POSTGRES_CONNECTION_STRING:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lumen}}
+    command: python -m uvicorn src.main:app --host 0.0.0.0 --port ${BACKEND_PORT:-9000} --reload
+    volumes:
+      - ./backend:/app
+    ports:
+      - "${BACKEND_PORT:-9000}:${BACKEND_PORT:-9000}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,24 +51,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - lumen-net
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: lumen-frontend
-    env_file:
-      - ./.env
-    environment:
-      PORT: ${FRONTEND_PORT:-3000}
-      BACKEND_URL: http://backend:${BACKEND_PORT:-9000}
-    ports:
-      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
-    depends_on:
-      - backend
     restart: unless-stopped
     networks:
       - lumen-net

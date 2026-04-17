@@ -25,7 +25,7 @@ export function AuthShell({
         <CardHeader className="space-y-3 text-center">
           <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1 text-sm font-medium text-primary">
             <Sparkles className="h-4 w-4" />
-            Lumen
+            TexAI
           </div>
           <CardTitle className="text-2xl">{title}</CardTitle>
           <p className="text-sm text-muted-foreground">{subtitle}</p>

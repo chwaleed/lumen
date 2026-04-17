@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lumen Editor",
+  title: "TexAI Editor",
   description: "Collaborative LaTeX editing workspace",
 };
 
