@@ -27,6 +27,85 @@ export type PendingSnapshotChange = {
   text: string;
 };
 
+function mergePendingSnapshotChange(
+  previous: PendingSnapshotChange,
+  next: PendingSnapshotChange
+): PendingSnapshotChange | null {
+  const previousIsInsert = previous.range_length === 0 && previous.text.length > 0;
+  const nextIsInsert = next.range_length === 0 && next.text.length > 0;
+
+  if (previousIsInsert && nextIsInsert) {
+    const previousEndOffset = previous.range_offset + previous.text.length;
+
+    if (next.range_offset === previousEndOffset) {
+      return {
+        range_offset: previous.range_offset,
+        range_length: 0,
+        text: `${previous.text}${next.text}`,
+      };
+    }
+  }
+
+  const previousIsDelete = previous.range_length > 0 && previous.text.length === 0;
+  const nextIsDelete = next.range_length > 0 && next.text.length === 0;
+
+  if (previousIsDelete && nextIsDelete) {
+    if (next.range_offset === previous.range_offset) {
+      return {
+        range_offset: previous.range_offset,
+        range_length: previous.range_length + next.range_length,
+        text: "",
+      };
+    }
+
+    if (next.range_offset + next.range_length === previous.range_offset) {
+      return {
+        range_offset: next.range_offset,
+        range_length: previous.range_length + next.range_length,
+        text: "",
+      };
+    }
+  }
+
+  const previousIsReplace = previous.range_length > 0 && previous.text.length > 0;
+  const nextIsReplace = next.range_length > 0 && next.text.length > 0;
+
+  if (previousIsReplace && nextIsReplace) {
+    const previousEndOffset = previous.range_offset + previous.text.length;
+
+    if (next.range_offset === previousEndOffset) {
+      return {
+        range_offset: previous.range_offset,
+        range_length: previous.range_length + next.range_length,
+        text: `${previous.text}${next.text}`,
+      };
+    }
+  }
+
+  return null;
+}
+
+function compactPendingSnapshotChanges(changes: PendingSnapshotChange[]) {
+  return changes.reduce<PendingSnapshotChange[]>((accumulator, change) => {
+    const previous = accumulator.at(-1);
+
+    if (!previous) {
+      accumulator.push(change);
+      return accumulator;
+    }
+
+    const mergedChange = mergePendingSnapshotChange(previous, change);
+
+    if (!mergedChange) {
+      accumulator.push(change);
+      return accumulator;
+    }
+
+    accumulator[accumulator.length - 1] = mergedChange;
+    return accumulator;
+  }, []);
+}
+
 type LoadStatus = "idle" | "loading" | "loaded" | "error";
 
 type CreateEntryType = "file" | "folder";
@@ -523,12 +602,16 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       };
     }),
   appendPendingSnapshotChanges: (fileId, changes) =>
-    set((state) => ({
-      pendingSnapshotChanges: {
-        ...state.pendingSnapshotChanges,
-        [fileId]: [...(state.pendingSnapshotChanges[fileId] ?? []), ...changes],
-      },
-    })),
+    set((state) => {
+      const existingChanges = state.pendingSnapshotChanges[fileId] ?? [];
+
+      return {
+        pendingSnapshotChanges: {
+          ...state.pendingSnapshotChanges,
+          [fileId]: compactPendingSnapshotChanges([...existingChanges, ...changes]),
+        },
+      };
+    }),
   setFileContent: (fileId, value) =>
     set((state) => ({
       fileContents: {

@@ -251,9 +251,8 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
     });
 
     editor.onMouseDown((event) => {
-      // Monaco overlay widgets (find/replace, context menus, etc.) should not trigger AI selection popup.
       const targetType = event.target.type as number;
-      const isContentTarget = targetType === 6 || targetType === 7; // CONTENT_TEXT or CONTENT_EMPTY
+      const isContentTarget = targetType === 6 || targetType === 7; 
       isPointerSelectingRef.current = isContentTarget;
       isContentSelectionRef.current = isContentTarget;
       if (isContentTarget) {
