@@ -3,7 +3,16 @@ import { FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigationItems } from "@/app/(marketing)/components/landing-content";
 
-export function LandingHeader() {
+type LandingHeaderProps = {
+  isAuthenticated: boolean;
+};
+
+export function LandingHeader({ isAuthenticated }: LandingHeaderProps) {
+  const primaryHref = isAuthenticated ? "/dashboard" : "/signup";
+  const primaryLabel = isAuthenticated ? "Open dashboard" : "Start writing";
+  const secondaryHref = isAuthenticated ? "/dashboard" : "/login";
+  const secondaryLabel = isAuthenticated ? "Dashboard" : "Log in";
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
@@ -32,12 +41,12 @@ export function LandingHeader() {
 
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href="/login">Log in</Link>
+            <Link href={secondaryHref}>{secondaryLabel}</Link>
           </Button>
           <Button asChild size="sm">
-            <Link href="/signup">
+            <Link href={primaryHref}>
               <FileText data-icon="inline-start" />
-              Start writing
+              {primaryLabel}
             </Link>
           </Button>
         </div>

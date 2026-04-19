@@ -7,7 +7,6 @@ const AUTH_ROUTES = new Set(["/login", "/signup"]);
 
 function isProtectedRoute(pathname: string) {
   return (
-    pathname === "/" ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/projects") ||
     pathname.startsWith("/templates") ||
@@ -40,7 +39,7 @@ export async function proxy(request: NextRequest) {
 
     if (tokenPair) {
       const response =
-        pathname === "/" || AUTH_ROUTES.has(pathname)
+        AUTH_ROUTES.has(pathname)
           ? NextResponse.redirect(new URL("/dashboard", request.url))
           : NextResponse.next();
 
@@ -60,7 +59,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (accessToken) {
-    if (pathname === "/" || AUTH_ROUTES.has(pathname)) {
+    if (AUTH_ROUTES.has(pathname)) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 

@@ -2,7 +2,16 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { navigationItems } from "@/app/(marketing)/components/landing-content";
 
-export function LandingFooter() {
+type LandingFooterProps = {
+  isAuthenticated: boolean;
+};
+
+export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
+  const accountHref = isAuthenticated ? "/dashboard" : "/login";
+  const accountLabel = isAuthenticated ? "Dashboard" : "Log in";
+  const secondaryHref = isAuthenticated ? "/dashboard" : "/signup";
+  const secondaryLabel = isAuthenticated ? "Workspace" : "Sign up";
+
   return (
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
@@ -24,11 +33,11 @@ export function LandingFooter() {
               {item.label}
             </a>
           ))}
-          <Link href="/login" className="transition-colors hover:text-foreground">
-            Log in
+          <Link href={accountHref} className="transition-colors hover:text-foreground">
+            {accountLabel}
           </Link>
-          <Link href="/signup" className="transition-colors hover:text-foreground">
-            Sign up
+          <Link href={secondaryHref} className="transition-colors hover:text-foreground">
+            {secondaryLabel}
           </Link>
         </div>
 

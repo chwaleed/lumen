@@ -2,7 +2,16 @@ import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function LandingCta() {
+type LandingCtaProps = {
+  isAuthenticated: boolean;
+};
+
+export function LandingCta({ isAuthenticated }: LandingCtaProps) {
+  const primaryHref = isAuthenticated ? "/dashboard" : "/signup";
+  const primaryLabel = isAuthenticated ? "Open dashboard" : "Open TexAI free";
+  const secondaryHref = isAuthenticated ? "/dashboard" : "/login";
+  const secondaryLabel = isAuthenticated ? "Go to dashboard" : "View the editor";
+
   return (
     <section className="px-6 py-20">
       <div className="landing-cta-pattern relative mx-auto max-w-6xl overflow-hidden rounded-[calc(var(--radius)*2.4)] bg-primary px-6 py-16 text-center text-primary-foreground sm:px-10">
@@ -16,9 +25,9 @@ export function LandingCta() {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" variant="secondary">
-              <Link href="/signup">
+              <Link href={primaryHref}>
                 <Sparkles data-icon="inline-start" />
-                Open TexAI free
+                {primaryLabel}
               </Link>
             </Button>
             <Button
@@ -26,8 +35,8 @@ export function LandingCta() {
               size="lg"
               className="border border-primary-foreground/20 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"
             >
-              <Link href="/login">
-                View the editor
+              <Link href={secondaryHref}>
+                {secondaryLabel}
                 <ArrowRight data-icon="inline-end" />
               </Link>
             </Button>

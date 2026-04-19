@@ -8,10 +8,14 @@ import { LandingShowcase } from "@/app/(marketing)/components/landing-showcase";
 import { LandingStats } from "@/app/(marketing)/components/landing-stats";
 import { LandingWorkflow } from "@/app/(marketing)/components/landing-workflow";
 
-export function LandingPage() {
+type LandingPageProps = {
+  isAuthenticated: boolean;
+};
+
+export function LandingPage({ isAuthenticated }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <LandingHeader />
+      <LandingHeader isAuthenticated={isAuthenticated} />
       <main>
         <LandingHero />
         <LandingShowcase />
@@ -19,9 +23,9 @@ export function LandingPage() {
         <LandingFeatureGrid />
         <LandingWorkflow />
         <LandingAudience />
-        <LandingCta />
+        <LandingCta isAuthenticated={isAuthenticated} />
       </main>
-      <LandingFooter />
+      <LandingFooter isAuthenticated={isAuthenticated} />
     </div>
   );
 }
