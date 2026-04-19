@@ -9,26 +9,27 @@ type LandingHeaderProps = {
 
 export function LandingHeader({ isAuthenticated }: LandingHeaderProps) {
   const primaryHref = isAuthenticated ? "/dashboard" : "/signup";
-  const primaryLabel = isAuthenticated ? "Open dashboard" : "Start writing";
+  const primaryLabel = isAuthenticated ? "Dashboard" : "Start writing";
   const secondaryHref = isAuthenticated ? "/dashboard" : "/login";
   const secondaryLabel = isAuthenticated ? "Dashboard" : "Log in";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <Link
           href="/"
-          className="flex items-center gap-3 text-sm font-semibold tracking-[-0.02em]"
+          className="min-w-0 flex items-center gap-3 text-sm font-semibold tracking-[-0.02em]"
         >
           <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
             <Sparkles className="size-4" />
           </span>
-          <span className="flex flex-col">
-            <span>TexAI</span>
-            <span className="text-xs font-medium text-muted-foreground">
+          <span className="hidden flex-col sm:flex">
+            <span className="truncate">TexAI</span>
+            <span className="truncate text-xs font-medium text-muted-foreground">
               AI-native LaTeX editor
             </span>
           </span>
+          <span className="sm:hidden">TexAI</span>
         </Link>
 
         <nav className="hidden items-center gap-2 md:flex">
@@ -40,7 +41,12 @@ export function LandingHeader({ isAuthenticated }: LandingHeaderProps) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className={isAuthenticated ? "hidden" : "hidden sm:inline-flex"}
+          >
             <Link href={secondaryHref}>{secondaryLabel}</Link>
           </Button>
           <Button asChild size="sm">

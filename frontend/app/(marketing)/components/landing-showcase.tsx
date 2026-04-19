@@ -8,7 +8,7 @@ export function LandingShowcase() {
       id="showcase"
       className="border-b border-border bg-gradient-to-b from-background via-background to-soft/60"
     >
-      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-16 sm:py-20">
+      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-16 sm:px-6 sm:py-20">
         <div className="flex justify-center">
           <Badge
             variant="outline"

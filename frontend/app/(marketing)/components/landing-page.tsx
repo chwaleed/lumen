@@ -17,7 +17,7 @@ export function LandingPage({ isAuthenticated }: LandingPageProps) {
     <div className="min-h-screen bg-background text-foreground">
       <LandingHeader isAuthenticated={isAuthenticated} />
       <main>
-        <LandingHero />
+        <LandingHero isAuthenticated={isAuthenticated} />
         <LandingShowcase />
         <LandingStats />
         <LandingFeatureGrid />

@@ -14,7 +14,7 @@ export function LandingDashboardShowcase() {
 
   return (
     <div className="landing-panel-shadow overflow-hidden rounded-[calc(var(--radius)*1.8)] border border-border bg-background">
-      <div className="flex h-10 items-center gap-3 border-b border-border bg-panel px-4">
+      <div className="flex h-10 items-center gap-3 border-b border-border bg-panel px-3 sm:px-4">
         <div className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full bg-muted-foreground/30" />
           <span className="size-2.5 rounded-full bg-muted-foreground/30" />
@@ -26,9 +26,9 @@ export function LandingDashboardShowcase() {
         </div>
       </div>
 
-      <div className="grid min-h-[24rem] md:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="grid min-h-[24rem] md:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="border-b border-border bg-panel md:border-r md:border-b-0">
-          <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-3 p-3 sm:p-4">
             <button
               type="button"
               className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground"
@@ -52,17 +52,17 @@ export function LandingDashboardShowcase() {
           </div>
         </aside>
 
-        <div className="flex flex-col gap-6 p-6">
+        <div className="flex flex-col gap-5 p-4 sm:p-6">
           <div className="flex flex-col gap-2">
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted-foreground">
               Quick start
             </p>
-            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+            <h3 className="text-xl font-semibold tracking-[-0.04em] sm:text-2xl">
               Start from a template that matches your work.
             </h3>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {templateCards.map((template) => {
               const Icon = template.icon;
               const isActive = activeTemplate === template.key;
@@ -96,7 +96,7 @@ export function LandingDashboardShowcase() {
               <Sidebar className="size-4 text-muted-foreground" />
               Recent documents
             </div>
-            <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               {documentCards.map((document) => (
                 <div
                   key={document.title}

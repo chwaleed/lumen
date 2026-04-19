@@ -7,23 +7,23 @@ type LandingCtaProps = {
 };
 
 export function LandingCta({ isAuthenticated }: LandingCtaProps) {
-  const primaryHref = isAuthenticated ? "/dashboard" : "/signup";
-  const primaryLabel = isAuthenticated ? "Open dashboard" : "Open TexAI free";
-  const secondaryHref = isAuthenticated ? "/dashboard" : "/login";
-  const secondaryLabel = isAuthenticated ? "Go to dashboard" : "View the editor";
+  const primaryHref = isAuthenticated ? "/projects" : "/signup";
+  const primaryLabel = isAuthenticated ? "Create a new project" : "Open TexAI free";
+  const secondaryHref = isAuthenticated ? "/templates" : "/login";
+  const secondaryLabel = isAuthenticated ? "Browse templates" : "View the editor";
 
   return (
-    <section className="px-6 py-20">
-      <div className="landing-cta-pattern relative mx-auto max-w-6xl overflow-hidden rounded-[calc(var(--radius)*2.4)] bg-primary px-6 py-16 text-center text-primary-foreground sm:px-10">
+    <section className="px-4 py-20 sm:px-6">
+      <div className="landing-cta-pattern relative mx-auto max-w-6xl overflow-hidden rounded-[calc(var(--radius)*2.4)] bg-primary px-5 py-14 text-center text-primary-foreground sm:px-10 sm:py-16">
         <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6">
-          <h2 className="text-4xl font-semibold tracking-[-0.06em] text-balance sm:text-5xl">
+          <h2 className="text-3xl font-semibold tracking-[-0.06em] text-balance sm:text-5xl">
             Your LaTeX workspace, now with an AI co-author.
           </h2>
-          <p className="text-lg leading-8 text-primary-foreground/75">
+          <p className="text-base leading-7 text-primary-foreground/75 sm:text-lg sm:leading-8">
             Open the editor today with no install, no setup detour, and a free
             tier that gets the writing started immediately.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button asChild size="lg" variant="secondary">
               <Link href={primaryHref}>
                 <Sparkles data-icon="inline-start" />

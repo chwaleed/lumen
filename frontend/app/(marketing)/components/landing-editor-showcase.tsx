@@ -77,7 +77,7 @@ export function LandingEditorShowcase() {
 
   return (
     <div className="landing-panel-shadow overflow-hidden rounded-[calc(var(--radius)*1.8)] border border-border bg-background">
-      <div className="flex h-10 items-center gap-3 border-b border-border bg-panel px-4">
+      <div className="flex h-10 items-center gap-3 border-b border-border bg-panel px-3 sm:px-4">
         <div className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted-foreground">
           <FolderOpen className="size-3" />
           Editor workspace
@@ -138,7 +138,7 @@ export function LandingEditorShowcase() {
             </div>
           </div>
 
-          <div className="grid min-h-[24rem] grid-cols-[3rem_minmax(0,1fr)] bg-background">
+          <div className="grid min-h-[22rem] grid-cols-[2.5rem_minmax(0,1fr)] bg-background sm:min-h-[24rem] sm:grid-cols-[3rem_minmax(0,1fr)]">
             <div className="border-r border-border bg-soft py-4 text-right font-mono text-xs text-muted-foreground">
               {editorLines.map((line) => (
                 <div key={line.line} className="px-3 py-1.5">
@@ -146,9 +146,9 @@ export function LandingEditorShowcase() {
                 </div>
               ))}
             </div>
-            <div className="overflow-hidden px-4 py-4 font-mono text-sm leading-7">
+            <div className="overflow-x-auto px-3 py-4 font-mono text-xs leading-6 sm:px-4 sm:text-sm sm:leading-7">
               {editorLines.map((line) => (
-                <div key={line.line} className="py-1.5">
+                <div key={line.line} className="min-w-[22rem] py-1.5 sm:min-w-0">
                   {line.parts.map(([className, value], index) => (
                     <span key={`${line.line}-${index}`} className={className}>
                       {value}
@@ -162,7 +162,7 @@ export function LandingEditorShowcase() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 border-t border-border bg-soft px-4 py-2 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border bg-soft px-3 py-2 font-mono text-[0.66rem] uppercase tracking-[0.14em] text-muted-foreground sm:px-4 sm:text-[0.7rem] sm:tracking-[0.16em]">
             <div className="flex items-center gap-2">
               <span className="landing-status-dot size-2 rounded-full bg-success" />
               Ready
@@ -172,7 +172,7 @@ export function LandingEditorShowcase() {
             <span className="ml-auto">Ln 6, Col 14</span>
           </div>
 
-          <div className="landing-floating absolute inset-x-4 bottom-8 flex max-w-max items-center gap-3 rounded-2xl border border-border bg-background px-4 py-3 shadow-lg">
+          <div className="mx-3 my-3 flex flex-col gap-3 rounded-2xl border border-border bg-background px-4 py-3 shadow-lg sm:mx-4 xl:landing-floating xl:absolute xl:inset-x-4 xl:bottom-8 xl:my-0 xl:max-w-max xl:flex-row xl:items-center">
             <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Bot className="size-4" />
             </div>
@@ -204,7 +204,7 @@ export function LandingEditorShowcase() {
         </div>
 
         <aside className="bg-paper text-paper-foreground">
-          <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-4">
             <div className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-soft-foreground">
               <span className="landing-status-dot size-2 rounded-full bg-success" />
               Preview
@@ -228,7 +228,7 @@ export function LandingEditorShowcase() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 px-6 py-8">
+          <div className="flex flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8">
             <div className="text-center">
               <h3 className="text-lg font-semibold">Presentation</h3>
               <p className="mt-1 text-sm text-soft-foreground">Your Name · Today</p>

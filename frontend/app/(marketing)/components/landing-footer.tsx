@@ -7,10 +7,10 @@ type LandingFooterProps = {
 };
 
 export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
-  const accountHref = isAuthenticated ? "/dashboard" : "/login";
-  const accountLabel = isAuthenticated ? "Dashboard" : "Log in";
-  const secondaryHref = isAuthenticated ? "/dashboard" : "/signup";
-  const secondaryLabel = isAuthenticated ? "Workspace" : "Sign up";
+  const accountHref = isAuthenticated ? "/projects" : "/login";
+  const accountLabel = isAuthenticated ? "Projects" : "Log in";
+  const secondaryHref = isAuthenticated ? "/templates" : "/signup";
+  const secondaryLabel = isAuthenticated ? "Templates" : "Sign up";
 
   return (
     <footer className="border-t border-border">
