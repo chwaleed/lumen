@@ -20,7 +20,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
       <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-8 px-4 py-20 text-center sm:px-6 sm:py-32">
         <Badge
           variant="outline"
-          className="h-auto max-w-full rounded-full bg-background/80 px-4 py-2 font-mono text-[0.68rem] tracking-[0.14em] uppercase text-muted-foreground sm:text-[0.7rem] sm:tracking-[0.18em]"
+          className="hidden h-auto max-w-full rounded-full bg-background/80 px-4 py-2 font-mono text-[0.68rem] tracking-[0.14em] uppercase text-muted-foreground sm:inline-flex sm:text-[0.7rem] sm:tracking-[0.18em]"
         >
           <span className="rounded-full bg-primary px-2 py-1 text-[0.6rem] font-semibold tracking-[0.22em] text-primary-foreground">
             New
