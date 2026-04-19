@@ -41,39 +41,47 @@ export function SignupForm() {
 
   return (
     <AuthShell
-      title="Create account"
-      subtitle="Start collaborating in your workspace."
+      title="Create an account"
+      subtitle="Join our mindful workspace today."
       footerText="Already have an account?"
       footerLinkLabel="Log in"
       footerLinkHref="/login"
     >
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="signup-name">Name</Label>
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="signup-name" className="text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground">
+            Full name
+          </Label>
           <Input
             id="signup-name"
             type="text"
-            placeholder="Your full name"
+            placeholder="Enter your full name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             autoComplete="name"
+            className="h-12 rounded-2xl border-border/60 bg-soft px-4 text-sm shadow-none"
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="signup-email">Email</Label>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="signup-email" className="text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground">
+            Email address
+          </Label>
           <Input
             id="signup-email"
             type="email"
-            placeholder="you@example.com"
+            placeholder="name@company.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
+            className="h-12 rounded-2xl border-border/60 bg-soft px-4 text-sm shadow-none"
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="signup-password">Password</Label>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="signup-password" className="text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground">
+            Password
+          </Label>
           <Input
             id="signup-password"
             type="password"
@@ -81,11 +89,14 @@ export function SignupForm() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="new-password"
+            className="h-12 rounded-2xl border-border/60 bg-soft px-4 text-sm shadow-none"
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="signup-confirm-password">Confirm password</Label>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="signup-confirm-password" className="text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground">
+            Confirm password
+          </Label>
           <Input
             id="signup-confirm-password"
             type="password"
@@ -93,25 +104,30 @@ export function SignupForm() {
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             autoComplete="new-password"
+            className="h-12 rounded-2xl border-border/60 bg-soft px-4 text-sm shadow-none"
             required
           />
         </div>
 
         {message ? (
           <p
-            className={`rounded-md border px-3 py-2 text-sm ${
+            className={`rounded-2xl border px-4 py-3 text-sm ${
               isError
-                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                ? "border-destructive/20 bg-destructive/8 text-destructive"
                 : isSuccess
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-border bg-muted text-muted-foreground"
+                  ? "border-primary/20 bg-primary/8 text-primary"
+                  : "border-border bg-soft text-muted-foreground"
             }`}
           >
             {message}
           </p>
         ) : null}
 
-        <Button type="submit" className="w-full" disabled={status === "submitting"}>
+        <Button
+          type="submit"
+          className="mt-2 h-12 w-full rounded-full text-sm font-medium"
+          disabled={status === "submitting"}
+        >
           {status === "submitting" ? "Creating account..." : "Create account"}
         </Button>
       </form>

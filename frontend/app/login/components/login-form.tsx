@@ -30,26 +30,31 @@ export function LoginForm() {
   return (
     <AuthShell
       title="Log in"
-      subtitle="Continue your writing session."
+      subtitle="Return to your quiet writing space."
       footerText="Need an account?"
       footerLinkLabel="Create one"
       footerLinkHref="/signup"
     >
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="login-email">Email</Label>
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="login-email" className="text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground">
+            Email address
+          </Label>
           <Input
             id="login-email"
             type="email"
-            placeholder="you@example.com"
+            placeholder="name@company.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
+            className="h-12 rounded-2xl border-border/60 bg-soft px-4 text-sm shadow-none"
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="login-password">Password</Label>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="login-password" className="text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground">
+            Password
+          </Label>
           <Input
             id="login-password"
             type="password"
@@ -57,17 +62,22 @@ export function LoginForm() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
+            className="h-12 rounded-2xl border-border/60 bg-soft px-4 text-sm shadow-none"
             required
           />
         </div>
 
         {errorMessage ? (
-          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="rounded-2xl border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive">
             {errorMessage}
           </p>
         ) : null}
 
-        <Button type="submit" className="w-full" disabled={status === "submitting"}>
+        <Button
+          type="submit"
+          className="mt-2 h-12 w-full rounded-full text-sm font-medium"
+          disabled={status === "submitting"}
+        >
           {status === "submitting" ? "Logging in..." : "Log in"}
         </Button>
       </form>
