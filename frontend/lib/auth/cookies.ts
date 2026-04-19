@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { TokenPair } from "@/lib/auth/backend";
 
-export const ACCESS_TOKEN_COOKIE_NAME = "lumen_access_token";
-export const REFRESH_TOKEN_COOKIE_NAME = "lumen_refresh_token";
+export const ACCESS_TOKEN_COOKIE_NAME = "texai_access_token";
+export const REFRESH_TOKEN_COOKIE_NAME = "texai_refresh_token";
 
 type RequestWithHeaders = {
   headers: Headers;

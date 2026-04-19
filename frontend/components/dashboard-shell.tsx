@@ -74,7 +74,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         onOpenProject={(projectId) => router.push(`/project/${projectId}`)}
-        user={{ name: "Demo User", email: "demo@lumen.dev" }}
+        user={{ name: "Demo User", email: "demo@texai.dev" }}
         onLogout={() => router.push("/login")}
       />
       <div className="flex min-w-0 flex-1 flex-col">
