@@ -43,7 +43,7 @@ def create_presigned_upload(
     project = get_project_for_user(session, current_user, payload.project_id)
     file_name = _safe_file_name(payload.file_name)
     content_type = _clean_image_content_type(payload.content_type)
-    object_key = f"app/{project.id}/{file_name}"
+    object_key = f"uploads/{project.id}/{file_name}"
 
     s3_client = boto3.client(
         "s3",
