@@ -200,8 +200,8 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
     payload = upload_response.json()
     assert payload["success"] is True
     assert payload["data"]["upload_url"] == "https://texai-bucket.s3.amazonaws.com/signed-upload"
-    assert payload["data"]["file_url"] == f"https://texai-bucket.s3.amazonaws.com/app/{project_id}/chart.png"
-    assert payload["data"]["object_key"] == f"app/{project_id}/chart.png"
+    assert payload["data"]["file_url"] == f"https://texai-bucket.s3.amazonaws.com/uploads/{project_id}/chart.png"
+    assert payload["data"]["object_key"] == f"uploads/{project_id}/chart.png"
     assert payload["data"]["headers"] == {"Content-Type": "image/png"}
     assert captured_params["service_name"] == "s3"
     assert captured_params["client_kwargs"]["region_name"] == "us-east-1"
@@ -209,7 +209,7 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
     assert captured_params["operation_name"] == "put_object"
     assert captured_params["params"]["Bucket"] == "texai-bucket"
     assert captured_params["params"]["ContentType"] == "image/png"
-    assert captured_params["params"]["Key"] == f"app/{project_id}/chart.png"
+    assert captured_params["params"]["Key"] == f"uploads/{project_id}/chart.png"
 
 
 def test_presigned_upload_url_rejects_non_images(project_client: TestClient) -> None:
