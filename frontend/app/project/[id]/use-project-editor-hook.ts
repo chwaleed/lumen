@@ -503,9 +503,12 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
     }
 
     const uploadTarget = presignedResult.payload.data;
+    const signedContentType = uploadTarget.headers["Content-Type"] ?? contentType;
     const uploadResponse = await fetch(uploadTarget.upload_url, {
       method: "PUT",
-      headers: uploadTarget.headers,
+      headers: {
+        "Content-Type": signedContentType,
+      },
       body: file,
     });
 

@@ -2,6 +2,7 @@ from pathlib import PurePath
 from urllib.parse import quote
 
 import boto3
+from botocore.config import Config
 from fastapi import status
 from sqlmodel import Session
 
@@ -44,7 +45,7 @@ def create_presigned_upload(
     content_type = _clean_image_content_type(payload.content_type)
     object_key = f"app/{project.id}/{file_name}"
 
-    s3_client = boto3.client("s3")
+    s3_client = boto3.client("s3", config=Config(signature_version="s3v4"))
     upload_url = s3_client.generate_presigned_url(
         "put_object",
         Params={

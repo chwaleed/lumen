@@ -15,6 +15,7 @@ def project_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setenv("POSTGRES_CONNECTION_STRING", database_url)
     monkeypatch.setenv("SENTRY_DSN", "")
+    monkeypatch.setenv("S3_BUCKET_NAME", "texai-bucket")
     get_settings.cache_clear()
 
     app = create_app(init_db_on_startup=True)
@@ -177,7 +178,12 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
             captured_params["expires_in"] = ExpiresIn
             return "https://texai-bucket.s3.amazonaws.com/signed-upload"
 
-    monkeypatch.setattr("src.uploads.service.boto3.client", lambda service_name: FakeS3Client())
+    def fake_boto3_client(service_name: str, **kwargs: object) -> FakeS3Client:
+        captured_params["service_name"] = service_name
+        captured_params["client_kwargs"] = kwargs
+        return FakeS3Client()
+
+    monkeypatch.setattr("src.uploads.service.boto3.client", fake_boto3_client)
 
     upload_response = project_client.post(
         "/uploads/presigned-url",
@@ -196,6 +202,8 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
     assert payload["data"]["file_url"] == f"https://texai-bucket.s3.amazonaws.com/app/{project_id}/chart.png"
     assert payload["data"]["object_key"] == f"app/{project_id}/chart.png"
     assert payload["data"]["headers"] == {"Content-Type": "image/png"}
+    assert captured_params["service_name"] == "s3"
+    assert captured_params["client_kwargs"]["config"].signature_version == "s3v4"
     assert captured_params["operation_name"] == "put_object"
     assert captured_params["params"]["Bucket"] == "texai-bucket"
     assert captured_params["params"]["ContentType"] == "image/png"
