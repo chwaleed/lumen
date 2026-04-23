@@ -1,4 +1,4 @@
-import { FilePlus, FolderPlus, MoreVertical, Pencil } from "lucide-react";
+import { FilePlus, FolderPlus, MoreVertical, Pencil, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,6 +24,7 @@ type SidebarFilesTabProps = {
   onToggleFolder: (id: string) => void;
   onAddFile: (parentId: string) => void;
   onAddFolder: (parentId: string) => void;
+  onUploadFile: (parentId: string) => void;
   onOpenFile: (fileId: string, fileName: string) => void;
   onStartRename: (entryId: string, currentName: string) => void;
   onSubmitRename: (entryId: string) => Promise<void>;
@@ -45,6 +46,7 @@ export function SidebarFilesTab({
   onToggleFolder,
   onAddFile,
   onAddFolder,
+  onUploadFile,
   onOpenFile,
   onStartRename,
   onSubmitRename,
@@ -91,12 +93,22 @@ export function SidebarFilesTab({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 mr-1"
+              className="h-6 w-6"
               onClick={() => onAddFolder("root")}
               aria-label="Create folder"
               title="New Folder"
             >
               <FolderPlus className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 mr-1"
+              onClick={() => onUploadFile("root")}
+              aria-label="Upload file"
+              title="Upload File"
+            >
+              <Upload className="h-4 w-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -129,6 +141,7 @@ export function SidebarFilesTab({
               onToggleFolder={onToggleFolder}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
+              onUploadFile={onUploadFile}
               onOpenFile={onOpenFile}
               onStartRename={onStartRename}
               onSubmitRename={onSubmitRename}

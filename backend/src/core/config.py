@@ -45,6 +45,11 @@ class Settings(BaseSettings):
         default=True,
         alias="SENTRY_SEND_DEFAULT_PII",
     )
+    s3_bucket_name: str = Field(default="texai-bucket", alias="S3_BUCKET_NAME")
+    s3_presigned_url_expires_seconds: int = Field(
+        default=900,
+        alias="S3_PRESIGNED_URL_EXPIRES_SECONDS",
+    )
     
 @lru_cache
 def get_settings() -> Settings:

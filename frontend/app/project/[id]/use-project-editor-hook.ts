@@ -110,6 +110,13 @@ type LoadStatus = "idle" | "loading" | "loaded" | "error";
 
 type CreateEntryType = "file" | "folder";
 
+type PresignedUploadResponse = {
+  upload_url: string;
+  file_url: string;
+  object_key: string;
+  headers: Record<string, string>;
+};
+
 type ProjectEditorState = {
   projectId: string | null;
   projectName: string;
@@ -144,6 +151,7 @@ type ProjectEditorState = {
   loadProject: (projectId: string) => Promise<void>;
   openFile: (fileId: string, fileName: string) => void;
   createEntry: (parentId: string | null, type: CreateEntryType) => Promise<void>;
+  uploadFile: (parentId: string | null, file: File) => Promise<void>;
   renameProject: (name: string) => Promise<boolean>;
   renameEntry: (entryId: string, name: string) => Promise<boolean>;
   deleteEntry: (entryId: string) => Promise<boolean>;
@@ -460,6 +468,97 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         },
       };
     });
+  },
+  uploadFile: async (parentId, file) => {
+    const { projectId } = get();
+
+    if (!projectId) {
+      return;
+    }
+
+    const contentType = file.type;
+    if (!contentType.startsWith("image/")) {
+      set({
+        projectErrorMessage: "Only image uploads are allowed.",
+      });
+      return;
+    }
+
+    const presignedResult = await postApi<PresignedUploadResponse>("/api/uploads/presigned-url", {
+      project_id: Number(projectId),
+      file_name: file.name,
+      content_type: contentType,
+    });
+
+    if (
+      presignedResult.status < 200 ||
+      presignedResult.status >= 300 ||
+      !presignedResult.payload.success ||
+      !presignedResult.payload.data
+    ) {
+      set({
+        projectErrorMessage: presignedResult.payload.message ?? "Unable to prepare this upload right now.",
+      });
+      return;
+    }
+
+    const uploadTarget = presignedResult.payload.data;
+    const uploadResponse = await fetch(uploadTarget.upload_url, {
+      method: "PUT",
+      headers: uploadTarget.headers,
+      body: file,
+    });
+
+    if (!uploadResponse.ok) {
+      set({
+        projectErrorMessage: "Unable to upload this file to storage right now.",
+      });
+      return;
+    }
+
+    const createResult = await postApi<ProjectFileEntry>(`/api/projects/${projectId}/files`, {
+      name: file.name,
+      type: "file",
+      parent_id: parentId ? Number(parentId) : null,
+      mime_type: contentType,
+      file_url: uploadTarget.file_url,
+    });
+
+    if (
+      createResult.status < 200 ||
+      createResult.status >= 300 ||
+      !createResult.payload.success ||
+      !createResult.payload.data
+    ) {
+      set({
+        projectErrorMessage: createResult.payload.message ?? "Uploaded, but unable to save this file in the project.",
+      });
+      return;
+    }
+
+    const newEntry = createResult.payload.data;
+    const fileNode = createFileNode(newEntry);
+
+    set((state) => ({
+      filesTree: addNode(state.filesTree, parentId ?? "root", fileNode),
+      fileContents: {
+        ...state.fileContents,
+        [String(newEntry.id)]: newEntry.content ?? "",
+      },
+      savedFileContents: {
+        ...state.savedFileContents,
+        [String(newEntry.id)]: newEntry.content ?? "",
+      },
+      pendingSnapshotChanges: {
+        ...state.pendingSnapshotChanges,
+        [String(newEntry.id)]: [],
+      },
+      snapshotVersions: {
+        ...state.snapshotVersions,
+        [String(newEntry.id)]: newEntry.snapshot_version ?? 0,
+      },
+      projectErrorMessage: null,
+    }));
   },
   renameProject: async (name) => {
     const { projectId } = get();

@@ -20,25 +20,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.alter_column('file_entries', 'content', new_column_name="file_url")
-    
-    op.alter_column('file_entries', 'file_url', existing_type= sa.Text(), type_=sa.VARCHAR(length=255))
-    
-    pass
+    with op.batch_alter_table("file_entries") as batch_op:
+        batch_op.alter_column(
+            "content",
+            existing_type=sa.Text(),
+            new_column_name="file_url",
+            type_=sa.VARCHAR(length=255),
+        )
 
 
 def downgrade() -> None:
-    
-    op.alter_column(
-        'file_entries',
-        'file_url',
-        existing_type=sa.VARCHAR(length=255),
-        type_=sa.Text()
-    )
-    
-    op.alter_column(
-        'file_entries',
-        'file_url',
-        new_column_name='content'
-    )
-    pass
+    with op.batch_alter_table("file_entries") as batch_op:
+        batch_op.alter_column(
+            "file_url",
+            existing_type=sa.VARCHAR(length=255),
+            type_=sa.Text(),
+            new_column_name="content",
+        )

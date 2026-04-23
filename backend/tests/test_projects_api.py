@@ -155,3 +155,71 @@ def test_project_endpoints_require_project_ownership(project_client: TestClient)
     get_project_response = project_client.get(f"/projects/{project_id}", headers=second_headers)
     assert get_project_response.status_code == 404
     assert get_project_response.json()["message"] == "Project not found."
+
+
+def test_presigned_upload_url_uses_project_scoped_s3_key(
+    project_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _auth_headers(project_client)
+    project_response = project_client.post(
+        "/projects",
+        json={"name": "Upload Project"},
+        headers=headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+    captured_params: dict[str, object] = {}
+
+    class FakeS3Client:
+        def generate_presigned_url(self, operation_name: str, *, Params: dict[str, object], ExpiresIn: int) -> str:
+            captured_params["operation_name"] = operation_name
+            captured_params["params"] = Params
+            captured_params["expires_in"] = ExpiresIn
+            return "https://texai-bucket.s3.amazonaws.com/signed-upload"
+
+    monkeypatch.setattr("src.uploads.service.boto3.client", lambda service_name: FakeS3Client())
+
+    upload_response = project_client.post(
+        "/uploads/presigned-url",
+        json={
+            "project_id": project_id,
+            "file_name": "figures/chart.png",
+            "content_type": "image/png",
+        },
+        headers=headers,
+    )
+
+    assert upload_response.status_code == 200
+    payload = upload_response.json()
+    assert payload["success"] is True
+    assert payload["data"]["upload_url"] == "https://texai-bucket.s3.amazonaws.com/signed-upload"
+    assert payload["data"]["file_url"] == f"https://texai-bucket.s3.amazonaws.com/app/{project_id}/chart.png"
+    assert payload["data"]["object_key"] == f"app/{project_id}/chart.png"
+    assert payload["data"]["headers"] == {"Content-Type": "image/png"}
+    assert captured_params["operation_name"] == "put_object"
+    assert captured_params["params"]["Bucket"] == "texai-bucket"
+    assert captured_params["params"]["ContentType"] == "image/png"
+    assert captured_params["params"]["Key"] == f"app/{project_id}/chart.png"
+
+
+def test_presigned_upload_url_rejects_non_images(project_client: TestClient) -> None:
+    headers = _auth_headers(project_client)
+    project_response = project_client.post(
+        "/projects",
+        json={"name": "Upload Project"},
+        headers=headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+
+    upload_response = project_client.post(
+        "/uploads/presigned-url",
+        json={
+            "project_id": project_id,
+            "file_name": "main.tex",
+            "content_type": "text/x-tex",
+        },
+        headers=headers,
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["message"] == "Only image uploads are allowed."

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderPlus, Image as ImageIcon, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderPlus, Image as ImageIcon, MoreVertical, Pencil, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +19,7 @@ type SidebarTreeNodeProps = {
   onToggleFolder: (id: string) => void;
   onAddFile: (parentId: string) => void;
   onAddFolder: (parentId: string) => void;
+  onUploadFile: (parentId: string) => void;
   onOpenFile: (fileId: string, fileName: string) => void;
   onStartRename: (nodeId: string, currentName: string) => void;
   onSubmitRename: (nodeId: string) => void;
@@ -44,6 +45,7 @@ export function SidebarTreeNode({
   onToggleFolder,
   onAddFile,
   onAddFolder,
+  onUploadFile,
   onOpenFile,
   onStartRename,
   onSubmitRename,
@@ -127,6 +129,14 @@ export function SidebarTreeNode({
                 >
                   <FolderPlus className="mr-2 h-4 w-4" /> New Folder
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onUploadFile(node.id);
+                  }}
+                >
+                  <Upload className="mr-2 h-4 w-4" /> Upload File
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
               </>
             ) : null}
@@ -164,6 +174,7 @@ export function SidebarTreeNode({
               onToggleFolder={onToggleFolder}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}
+              onUploadFile={onUploadFile}
               onOpenFile={onOpenFile}
               onStartRename={onStartRename}
               onSubmitRename={onSubmitRename}

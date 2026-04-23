@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { SidebarAiTab } from "./sidebar-ai-tab";
 import { SidebarFilesTab } from "./sidebar-files-tab";
 import { SidebarProps } from "./types";
@@ -13,6 +13,7 @@ export function EditorSidebar({
   setSidebarOpen,
   onOpenFile,
   onCreateEntry,
+  onUploadFile,
   onRenameEntry,
   onDeleteEntry,
   onRenameProject,
@@ -22,6 +23,8 @@ export function EditorSidebar({
   const [editName, setEditName] = useState("");
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState(projectName);
+  const [uploadParentId, setUploadParentId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const findFolderOpenState = (nodes: SidebarProps["files"], id: string): boolean | undefined => {
     for (const node of nodes) {
@@ -109,8 +112,26 @@ export function EditorSidebar({
     }
   };
 
+  const handleUploadRequest = (parentId: string) => {
+    setUploadParentId(parentId === "root" ? null : parentId);
+    fileInputRef.current?.click();
+  };
+
+  const handleUploadInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    await onUploadFile(uploadParentId, file);
+    setUploadParentId(null);
+  };
+
   return (
     <div className="absolute left-0 z-20 md:relative md:left-0 w-full sm:w-72 flex-shrink-0 border-r bg-background md:bg-muted/10 flex-col h-full shadow-xl md:shadow-none flex">
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadInputChange} />
       {activeSidebarTab === "files" ? (
         <SidebarFilesTab
           files={files}
@@ -124,6 +145,7 @@ export function EditorSidebar({
           onToggleFolder={handleToggleFolder}
           onAddFile={(parentId) => void onCreateEntry(parentId === "root" ? null : parentId, "file")}
           onAddFolder={(parentId) => void onCreateEntry(parentId === "root" ? null : parentId, "folder")}
+          onUploadFile={handleUploadRequest}
           onOpenFile={onOpenFile}
           onStartRename={handleStartRename}
           onSubmitRename={handleSubmitRename}
