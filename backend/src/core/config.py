@@ -46,6 +46,7 @@ class Settings(BaseSettings):
         alias="SENTRY_SEND_DEFAULT_PII",
     )
     s3_bucket_name: str = Field(alias="S3_BUCKET_NAME")
+    s3_region: str = Field(alias="S3_REGION")
     s3_presigned_url_expires_seconds: int = Field(
         default=900,
         alias="S3_PRESIGNED_URL_EXPIRES_SECONDS",

@@ -16,6 +16,7 @@ def project_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("POSTGRES_CONNECTION_STRING", database_url)
     monkeypatch.setenv("SENTRY_DSN", "")
     monkeypatch.setenv("S3_BUCKET_NAME", "texai-bucket")
+    monkeypatch.setenv("S3_REGION", "us-east-1")
     get_settings.cache_clear()
 
     app = create_app(init_db_on_startup=True)
@@ -203,6 +204,7 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
     assert payload["data"]["object_key"] == f"app/{project_id}/chart.png"
     assert payload["data"]["headers"] == {"Content-Type": "image/png"}
     assert captured_params["service_name"] == "s3"
+    assert captured_params["client_kwargs"]["region_name"] == "us-east-1"
     assert captured_params["client_kwargs"]["config"].signature_version == "s3v4"
     assert captured_params["operation_name"] == "put_object"
     assert captured_params["params"]["Bucket"] == "texai-bucket"

@@ -45,7 +45,11 @@ def create_presigned_upload(
     content_type = _clean_image_content_type(payload.content_type)
     object_key = f"app/{project.id}/{file_name}"
 
-    s3_client = boto3.client("s3", config=Config(signature_version="s3v4"))
+    s3_client = boto3.client(
+        "s3",
+        region_name=settings.s3_region,
+        config=Config(signature_version="s3v4"),
+    )
     upload_url = s3_client.generate_presigned_url(
         "put_object",
         Params={
