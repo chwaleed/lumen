@@ -1,37 +1,62 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { features } from "@/app/(marketing)/components/landing-content";
-import { SectionHeading } from "@/app/(marketing)/components/section-heading";
+import { Sparkles, SquareTerminal, Zap } from "lucide-react";
+
+const features = [
+  {
+    icon: Zap,
+    title: "Instant Compilation",
+    description:
+      "Changes render in milliseconds. See your complex mathematical formulas appear instantly alongside your code.",
+  },
+  {
+    icon: SquareTerminal,
+    title: "AI Debugger",
+    description:
+      "Cryptic LaTeX errors are translated into plain English, with one-click automatic fixes for missing brackets.",
+  },
+  {
+    icon: Sparkles,
+    title: "AI Advertising",
+    description:
+      "Automatically generate high-converting marketing copy and social media posts for the templates you sell on the marketplace.",
+  },
+];
 
 export function LandingFeatureGrid() {
   return (
-    <section id="features" className="border-b border-border">
-      <div className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-20">
-        <SectionHeading
-          eyebrow="Features"
-          title="Everything a serious LaTeX writer needs."
-          description="A focused editor, thoughtful project structure, and just enough intelligence to reduce friction without overwhelming the writing surface."
-        />
+    <section id="features" className="border-t border-editorial-line bg-editorial-paper px-6 py-24 md:px-12 md:py-32">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-16 grid items-end gap-8 md:grid-cols-2">
+          <div>
+            <p className="mb-4 text-[10px] font-semibold tracking-[0.3em] text-editorial-ink/50 uppercase">
+              Complete AI Editor
+            </p>
+            <h2 className="font-serif text-4xl leading-none italic md:text-[56px]">
+              An assistant inside
+              <br />
+              your documents.
+            </h2>
+          </div>
+          <p className="max-w-sm text-lg leading-relaxed font-light text-editorial-muted">
+            Stop fighting compiler errors and memorizing arcane syntax. Focus on your research, let our intelligence
+            handle the formatting.
+          </p>
+        </div>
 
-        <div className="grid gap-px overflow-hidden rounded-[calc(var(--radius)*1.8)] border border-border bg-border lg:grid-cols-3">
+        <div className="grid border-t border-l border-editorial-line md:grid-cols-3">
           {features.map((feature) => {
             const Icon = feature.icon;
 
             return (
-              <Card
+              <div
                 key={feature.title}
-                className="rounded-none border-0 bg-background py-0 shadow-none ring-0"
+                className="group flex cursor-default flex-col items-start border-r border-b border-editorial-line p-10 transition-colors hover:bg-editorial-bg"
               >
-                <CardHeader className="px-6 pt-6">
-                  <div className="flex size-12 items-center justify-center rounded-2xl border border-border bg-panel text-muted-foreground">
-                    <Icon className="size-5" />
-                  </div>
-                  <CardTitle className="pt-3 text-lg">{feature.title}</CardTitle>
-                  <CardDescription className="text-base leading-7">
-                    {feature.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="px-6 pb-6" />
-              </Card>
+                <div className="mb-10 flex size-10 items-center justify-center border border-editorial-ink/20 text-editorial-ink transition-all duration-500 will-change-transform group-hover:scale-110 group-hover:bg-editorial-ink group-hover:text-editorial-paper">
+                  <Icon className="size-5 transition-colors duration-300" />
+                </div>
+                <h3 className="mb-4 text-sm font-bold tracking-widest uppercase">{feature.title}</h3>
+                <p className="text-sm leading-relaxed font-light text-editorial-muted">{feature.description}</p>
+              </div>
             );
           })}
         </div>

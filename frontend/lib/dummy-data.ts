@@ -3,19 +3,19 @@ export const dashboardQuickStarts = [
     id: "blank-document",
     name: "Blank Document",
     description: "Start from scratch",
-    theme: "bg-blue-50 text-blue-600",
+    theme: "bg-primary/8 text-primary",
   },
   {
     id: "academic-paper",
     name: "Academic Paper",
     description: "Standard IEEE/ACM format",
-    theme: "bg-violet-50 text-violet-600",
+    theme: "bg-secondary text-secondary-foreground",
   },
   {
     id: "math-assignment",
     name: "Math Assignment",
     description: "Pre-configured for equations",
-    theme: "bg-emerald-50 text-emerald-600",
+    theme: "bg-success/10 text-success",
   },
 ];
 

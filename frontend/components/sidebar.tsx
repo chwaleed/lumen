@@ -53,7 +53,7 @@ interface DashboardSidebarProps {
       </div>
 
       <div className="px-4 pt-3 pb-4">
-        <Button className="w-full justify-start bg-black text-white hover:bg-black/90" size="lg" onClick={() => onOpenProject('new')}>
+        <Button className="w-full justify-start bg-primary text-primary-foreground hover:bg-primary/90" size="lg" onClick={() => onOpenProject('new')}>
           <Plus className="mr-2 h-4 w-4" />
           New Project
         </Button>

@@ -15,12 +15,14 @@ type SignupState = {
   email: string;
   password: string;
   confirmPassword: string;
+  showPassword: boolean;
   status: SignupStatus;
   message: string | null;
   setName: (name: string) => void;
   setEmail: (email: string) => void;
   setPassword: (password: string) => void;
   setConfirmPassword: (confirmPassword: string) => void;
+  toggleShowPassword: () => void;
   submit: () => Promise<SignupSubmitResult>;
 };
 
@@ -31,12 +33,14 @@ export const useSignupHook = create<SignupState>()((set, get) => ({
   email: "",
   password: "",
   confirmPassword: "",
+  showPassword: false,
   status: "idle",
   message: null,
   setName: (name) => set({ name }),
   setEmail: (email) => set({ email }),
   setPassword: (password) => set({ password }),
   setConfirmPassword: (confirmPassword) => set({ confirmPassword }),
+  toggleShowPassword: () => set((state) => ({ showPassword: !state.showPassword })),
   submit: async () => {
     const { name, email, password, confirmPassword } = get();
 

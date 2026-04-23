@@ -8,10 +8,12 @@ type LoginStatus = "idle" | "submitting" | "success" | "error";
 type LoginState = {
   email: string;
   password: string;
+  showPassword: boolean;
   status: LoginStatus;
   errorMessage: string | null;
   setEmail: (email: string) => void;
   setPassword: (password: string) => void;
+  toggleShowPassword: () => void;
   submit: () => Promise<boolean>;
 };
 
@@ -20,10 +22,12 @@ const MIN_PASSWORD_LENGTH = 8;
 export const useLoginHook = create<LoginState>()((set, get) => ({
   email: "",
   password: "",
+  showPassword: false,
   status: "idle",
   errorMessage: null,
   setEmail: (email) => set({ email }),
   setPassword: (password) => set({ password }),
+  toggleShowPassword: () => set((state) => ({ showPassword: !state.showPassword })),
   submit: async () => {
     const { email, password } = get();
 
