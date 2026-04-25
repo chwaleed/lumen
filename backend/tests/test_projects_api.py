@@ -116,6 +116,29 @@ def test_project_creation_listing_and_file_creation_flow(project_client: TestCli
     assert rename_file_response.status_code == 200
     assert rename_file_response.json()["data"]["name"] == "chart.png"
 
+    create_nested_folder_response = project_client.post(
+        f"/projects/{project_id}/files",
+        json={"name": "figures", "type": "folder", "parent_id": folder_id},
+        headers=headers,
+    )
+    assert create_nested_folder_response.status_code == 201
+    nested_folder_id = create_nested_folder_response.json()["data"]["id"]
+
+    move_file_response = project_client.patch(
+        f"/projects/{project_id}/files/{create_file_response.json()['data']['id']}",
+        json={"parent_id": nested_folder_id},
+        headers=headers,
+    )
+    assert move_file_response.status_code == 200
+    assert move_file_response.json()["data"]["parent_id"] == nested_folder_id
+
+    invalid_folder_move_response = project_client.patch(
+        f"/projects/{project_id}/files/{nested_folder_id}",
+        json={"parent_id": nested_folder_id},
+        headers=headers,
+    )
+    assert invalid_folder_move_response.status_code == 400
+
     delete_entry_response = project_client.delete(
         f"/projects/{project_id}/files/{folder_id}",
         headers=headers,

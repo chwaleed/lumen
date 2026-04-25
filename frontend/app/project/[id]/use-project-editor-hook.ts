@@ -2,7 +2,7 @@
 
 import type { editor as MonacoEditor } from "monaco-editor";
 import { create } from "zustand";
-import { addNode, deleteNode, updateNode } from "@/components/editor-sidebar/file-tree-utils";
+import { addNode, deleteNode, moveNode, updateNode } from "@/components/editor-sidebar/file-tree-utils";
 import type { FileNode } from "@/components/editor-sidebar";
 import { postApi, requestApi } from "@/lib/http/client";
 import {
@@ -154,6 +154,7 @@ type ProjectEditorState = {
   uploadFile: (parentId: string | null, file: File) => Promise<void>;
   renameProject: (name: string) => Promise<boolean>;
   renameEntry: (entryId: string, name: string) => Promise<boolean>;
+  moveEntry: (entryId: string, parentId: string | null) => Promise<boolean>;
   deleteEntry: (entryId: string) => Promise<boolean>;
   createUntitledFile: () => Promise<void>;
   closeFile: (fileId: string) => void;
@@ -618,6 +619,31 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         renamedEntry.type === "file"
           ? renameOpenFiles(state.openFiles, entryId, renamedEntry.name)
           : state.openFiles,
+      projectErrorMessage: null,
+    }));
+    return true;
+  },
+  moveEntry: async (entryId, parentId) => {
+    const { projectId } = get();
+
+    if (!projectId) {
+      return false;
+    }
+
+    const { status, payload } = await requestApi<ProjectFileEntry>(`/api/projects/${projectId}/files/${entryId}`, {
+      method: "PATCH",
+      body: { parent_id: parentId ? Number(parentId) : null },
+    });
+
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
+      set({
+        projectErrorMessage: payload.message ?? "Unable to move this entry right now.",
+      });
+      return false;
+    }
+
+    set((state) => ({
+      filesTree: moveNode(state.filesTree, entryId, parentId ?? "root"),
       projectErrorMessage: null,
     }));
     return true;

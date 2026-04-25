@@ -15,6 +15,7 @@ class FileEntry(SQLModel, table=True):
         ),
         Index("idx_file_entries_project_id", "project_id"),
         Index("idx_file_entries_parent_id", "parent_id"),
+        Index("idx_file_entries_project_parent_id", "project_id", "parent_id"),
     )
     __mapper_args__ = {"confirm_deleted_rows": False}
 

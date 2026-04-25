@@ -63,6 +63,39 @@ export function addNode(nodes: FileNode[], parentId: string, newNode: FileNode):
   });
 }
 
+function findNode(nodes: FileNode[], id: string): FileNode | null {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node;
+    }
+
+    if (node.children) {
+      const childNode = findNode(node.children, id);
+      if (childNode) {
+        return childNode;
+      }
+    }
+  }
+
+  return null;
+}
+
+function hasDescendant(node: FileNode, descendantId: string): boolean {
+  return (node.children ?? []).some(
+    (childNode) => childNode.id === descendantId || hasDescendant(childNode, descendantId),
+  );
+}
+
+export function moveNode(nodes: FileNode[], nodeId: string, parentId: string): FileNode[] {
+  const nodeToMove = findNode(nodes, nodeId);
+
+  if (!nodeToMove || nodeId === parentId || hasDescendant(nodeToMove, parentId)) {
+    return nodes;
+  }
+
+  return addNode(deleteNode(nodes, nodeId), parentId, nodeToMove);
+}
+
 export function duplicateNode(nodes: FileNode[], id: string): FileNode[] {
   const nextNodes = [...nodes];
   const index = nextNodes.findIndex((node) => node.id === id);

@@ -15,6 +15,7 @@ export function EditorSidebar({
   onCreateEntry,
   onUploadFile,
   onRenameEntry,
+  onMoveEntry,
   onDeleteEntry,
   onRenameProject,
 }: SidebarProps) {
@@ -24,6 +25,8 @@ export function EditorSidebar({
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState(projectName);
   const [uploadParentId, setUploadParentId] = useState<string | null>(null);
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const findFolderOpenState = (nodes: SidebarProps["files"], id: string): boolean | undefined => {
@@ -129,6 +132,20 @@ export function EditorSidebar({
     setUploadParentId(null);
   };
 
+  const handleMove = async (nodeId: string, parentId: string | null) => {
+    if (nodeId === parentId) {
+      return;
+    }
+
+    const didMove = await onMoveEntry(nodeId, parentId);
+    if (didMove && parentId) {
+      setFolderOpenState((currentState) => ({
+        ...currentState,
+        [parentId]: true,
+      }));
+    }
+  };
+
   return (
     <div className="absolute left-0 z-20 md:relative md:left-0 w-full sm:w-72 flex-shrink-0 border-r bg-background md:bg-muted/10 flex-col h-full shadow-xl md:shadow-none flex">
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadInputChange} />
@@ -150,6 +167,15 @@ export function EditorSidebar({
           onStartRename={handleStartRename}
           onSubmitRename={handleSubmitRename}
           onDelete={handleDelete}
+          draggedNodeId={draggedNodeId}
+          dropTargetId={dropTargetId}
+          onDragStart={setDraggedNodeId}
+          onDragEnd={() => {
+            setDraggedNodeId(null);
+            setDropTargetId(null);
+          }}
+          onDropTargetChange={setDropTargetId}
+          onMoveEntry={(nodeId, parentId) => void handleMove(nodeId, parentId === "root" ? null : parentId)}
           onStartProjectRename={handleStartProjectRename}
           onSubmitProjectRename={handleSubmitProjectRename}
           onCloseSidebar={() => setSidebarOpen(false)}

@@ -57,6 +57,7 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const uploadFile = useProjectEditorHook((state) => state.uploadFile);
   const renameProject = useProjectEditorHook((state) => state.renameProject);
   const renameEntry = useProjectEditorHook((state) => state.renameEntry);
+  const moveEntry = useProjectEditorHook((state) => state.moveEntry);
   const deleteEntry = useProjectEditorHook((state) => state.deleteEntry);
   const closeFile = useProjectEditorHook((state) => state.closeFile);
   const setActiveFile = useProjectEditorHook((state) => state.setActiveFile);
@@ -344,6 +345,10 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
           onRenameEntry={async (entryId, name) => {
             clearSelectionPopup();
             return renameEntry(entryId, name);
+          }}
+          onMoveEntry={async (entryId, parentId) => {
+            clearSelectionPopup();
+            return moveEntry(entryId, parentId);
           }}
           onDeleteEntry={async (entryId) => {
             clearSelectionPopup();

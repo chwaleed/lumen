@@ -24,6 +24,12 @@ type SidebarTreeNodeProps = {
   onStartRename: (nodeId: string, currentName: string) => void;
   onSubmitRename: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
+  draggedNodeId: string | null;
+  dropTargetId: string | null;
+  onDragStart: (nodeId: string) => void;
+  onDragEnd: () => void;
+  onDropTargetChange: (nodeId: string | null) => void;
+  onMoveEntry: (nodeId: string, parentId: string) => void;
 };
 
 const fileIconClass = "h-4 w-4 mr-2 text-muted-foreground";
@@ -50,14 +56,63 @@ export function SidebarTreeNode({
   onStartRename,
   onSubmitRename,
   onDelete,
+  draggedNodeId,
+  dropTargetId,
+  onDragStart,
+  onDragEnd,
+  onDropTargetChange,
+  onMoveEntry,
 }: SidebarTreeNodeProps) {
   const paddingLeft = level * 12 + 8;
+  const isDragging = draggedNodeId === node.id;
+  const isFolderDropTarget = node.type === "folder" && dropTargetId === node.id && draggedNodeId !== node.id;
 
   return (
     <div>
       <div
-        className="flex items-center justify-between rounded-md py-1.5 text-sm hover:bg-muted group"
+        className={`flex items-center justify-between rounded-md py-1.5 text-sm hover:bg-muted group ${
+          isDragging ? "opacity-50" : ""
+        } ${isFolderDropTarget ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
         style={{ paddingLeft: `${paddingLeft}px`, paddingRight: "8px" }}
+        draggable={editingNodeId !== node.id}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", node.id);
+          onDragStart(node.id);
+        }}
+        onDragEnd={onDragEnd}
+        onDragOver={(event) => {
+          if (!draggedNodeId) {
+            return;
+          }
+
+          if (node.type !== "folder" || draggedNodeId === node.id) {
+            event.stopPropagation();
+            onDropTargetChange(null);
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "move";
+          onDropTargetChange(node.id);
+        }}
+        onDrop={(event) => {
+          if (!draggedNodeId) {
+            return;
+          }
+
+          if (node.type !== "folder" || draggedNodeId === node.id) {
+            event.stopPropagation();
+            onDropTargetChange(null);
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          onMoveEntry(draggedNodeId, node.id);
+          onDragEnd();
+        }}
       >
         <div
           className="flex items-center flex-1 overflow-hidden cursor-pointer"
@@ -179,6 +234,12 @@ export function SidebarTreeNode({
               onStartRename={onStartRename}
               onSubmitRename={onSubmitRename}
               onDelete={onDelete}
+              draggedNodeId={draggedNodeId}
+              dropTargetId={dropTargetId}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropTargetChange={onDropTargetChange}
+              onMoveEntry={onMoveEntry}
             />
           ))}
         </div>

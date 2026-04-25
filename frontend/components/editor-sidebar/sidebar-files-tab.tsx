@@ -29,6 +29,12 @@ type SidebarFilesTabProps = {
   onStartRename: (entryId: string, currentName: string) => void;
   onSubmitRename: (entryId: string) => Promise<void>;
   onDelete: (entryId: string) => Promise<void>;
+  draggedNodeId: string | null;
+  dropTargetId: string | null;
+  onDragStart: (entryId: string) => void;
+  onDragEnd: () => void;
+  onDropTargetChange: (entryId: string | null) => void;
+  onMoveEntry: (entryId: string, parentId: string) => void;
   onStartProjectRename: () => void;
   onSubmitProjectRename: () => Promise<void>;
   onCloseSidebar: () => void;
@@ -51,6 +57,12 @@ export function SidebarFilesTab({
   onStartRename,
   onSubmitRename,
   onDelete,
+  draggedNodeId,
+  dropTargetId,
+  onDragStart,
+  onDragEnd,
+  onDropTargetChange,
+  onMoveEntry,
   onStartProjectRename,
   onSubmitProjectRename,
   onCloseSidebar,
@@ -128,8 +140,38 @@ export function SidebarFilesTab({
         onClose={onCloseSidebar}
       />
 
-      <ScrollArea className="flex-1">
+      <ScrollArea
+        className="flex-1"
+        onDragOver={(event) => {
+          if (!draggedNodeId) {
+            return;
+          }
+
+          event.preventDefault();
+          onDropTargetChange("root");
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            onDropTargetChange(null);
+          }
+        }}
+        onDrop={(event) => {
+          if (!draggedNodeId) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          onMoveEntry(draggedNodeId, "root");
+          onDragEnd();
+        }}
+      >
         <div className="p-2 space-y-0.5">
+          {dropTargetId === "root" ? (
+            <div className="mb-1 rounded-md border border-dashed border-primary/60 bg-primary/10 px-2 py-1 text-xs text-primary">
+              Move to project root
+            </div>
+          ) : null}
           {files.map((node) => (
             <SidebarTreeNode
               key={node.id}
@@ -146,6 +188,12 @@ export function SidebarFilesTab({
               onStartRename={onStartRename}
               onSubmitRename={onSubmitRename}
               onDelete={onDelete}
+              draggedNodeId={draggedNodeId}
+              dropTargetId={dropTargetId}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropTargetChange={onDropTargetChange}
+              onMoveEntry={onMoveEntry}
             />
           ))}
         </div>

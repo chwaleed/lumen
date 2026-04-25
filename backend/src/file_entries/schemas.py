@@ -13,7 +13,8 @@ class FileEntryCreateRequest(BaseModel):
 
 
 class FileEntryUpdateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    parent_id: int | None = None
 
 
 class FileEntryResponse(BaseModel):

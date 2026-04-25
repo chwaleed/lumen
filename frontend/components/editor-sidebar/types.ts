@@ -10,6 +10,7 @@ export type SidebarProps = {
   onCreateEntry: (parentId: string | null, type: FileNode["type"]) => Promise<void>;
   onUploadFile: (parentId: string | null, file: File) => Promise<void>;
   onRenameEntry: (entryId: string, name: string) => Promise<boolean>;
+  onMoveEntry: (entryId: string, parentId: string | null) => Promise<boolean>;
   onDeleteEntry: (entryId: string) => Promise<boolean>;
   onRenameProject: (name: string) => Promise<boolean>;
 };

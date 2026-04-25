@@ -39,9 +39,16 @@ def patch_project_file(
     session: DbSession,
 ) -> ApiResponse:
     file_entry = update_file_entry(session, current_user, project_id, file_entry_id, payload)
+    message = (
+        "Folder renamed successfully."
+        if payload.name is not None and file_entry.type == "folder"
+        else "File renamed successfully."
+        if payload.name is not None
+        else "Entry moved successfully."
+    )
     return ApiResponseBuilder.success(
         data=serialize_file_entry(session, file_entry).model_dump(),
-        message="Folder renamed successfully." if file_entry.type == "folder" else "File renamed successfully.",
+        message=message,
     )
 
 
