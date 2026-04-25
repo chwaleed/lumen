@@ -6,8 +6,8 @@ export type SidebarProps = {
   projectName: string;
   files: FileNode[];
   setSidebarOpen: (open: boolean) => void;
-  onOpenFile: (fileId: string, fileName: string) => void;
-  onCreateEntry: (parentId: string | null, type: FileNode["type"]) => Promise<void>;
+  onOpenFile: (file: FileNode) => void;
+  onCreateEntry: (parentId: string | null, type: FileNode["type"], name: string) => Promise<void>;
   onUploadFile: (parentId: string | null, file: File) => Promise<void>;
   onRenameEntry: (entryId: string, name: string) => Promise<boolean>;
   onMoveEntry: (entryId: string, parentId: string | null) => Promise<boolean>;
@@ -15,10 +15,18 @@ export type SidebarProps = {
   onRenameProject: (name: string) => Promise<boolean>;
 };
 
+export type PendingCreateEntry = {
+  parentId: string;
+  type: FileNode["type"];
+  name: string;
+};
+
 export type FileNode = {
   id: string;
   name: string;
   type: "file" | "folder";
+  mimeType?: string | null;
+  fileUrl?: string | null;
   children?: FileNode[];
   isOpen?: boolean;
 };

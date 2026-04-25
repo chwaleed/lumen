@@ -19,6 +19,8 @@ export type SidebarTab = "files" | "ai";
 export type EditorFile = {
   id: string;
   name: string;
+  mimeType?: string | null;
+  fileUrl?: string | null;
 };
 
 export type PendingSnapshotChange = {
@@ -149,8 +151,8 @@ type ProjectEditorState = {
   submitAiChatPrompt: () => void;
   initializeForViewport: (isMobile: boolean) => void;
   loadProject: (projectId: string) => Promise<void>;
-  openFile: (fileId: string, fileName: string) => void;
-  createEntry: (parentId: string | null, type: CreateEntryType) => Promise<void>;
+  openFile: (file: FileNode) => void;
+  createEntry: (parentId: string | null, type: CreateEntryType, name: string) => Promise<void>;
   uploadFile: (parentId: string | null, file: File) => Promise<void>;
   renameProject: (name: string) => Promise<boolean>;
   renameEntry: (entryId: string, name: string) => Promise<boolean>;
@@ -170,9 +172,29 @@ type ProjectEditorState = {
   insertSnippet: (textToInsert: string) => void;
 };
 
-function withOpenFile(state: ProjectEditorState, fileId: string, fileName: string) {
+function withOpenFile(state: ProjectEditorState, file: FileNode | EditorFile) {
+  const fileId = file.id;
   const hasOpenTab = state.openFiles.some((file) => file.id === fileId);
-  const openFiles = hasOpenTab ? state.openFiles : [...state.openFiles, { id: fileId, name: fileName }];
+  const openFiles = hasOpenTab
+    ? state.openFiles.map((openFile) =>
+        openFile.id === fileId
+          ? {
+              ...openFile,
+              name: file.name,
+              mimeType: file.mimeType,
+              fileUrl: file.fileUrl,
+            }
+          : openFile
+      )
+    : [
+        ...state.openFiles,
+        {
+          id: fileId,
+          name: file.name,
+          mimeType: file.mimeType,
+          fileUrl: file.fileUrl,
+        },
+      ];
   const hasContent = Object.prototype.hasOwnProperty.call(state.fileContents, fileId);
   const fileContents = hasContent ? state.fileContents : { ...state.fileContents, [fileId]: "" };
 
@@ -215,6 +237,8 @@ function createFileNode(entry: ProjectFileEntry): FileNode {
     id: String(entry.id),
     name: entry.name,
     type: entry.type,
+    mimeType: entry.mime_type,
+    fileUrl: entry.file_url,
     isOpen: entry.type === "folder",
     children: entry.type === "folder" ? [] : undefined,
   };
@@ -280,7 +304,16 @@ function initializeProjectState(project: ProjectDetail) {
     projectStatus: "loaded" as const,
     projectErrorMessage: null,
     filesTree: tree,
-    openFiles: initialFile ? [{ id: String(initialFile.id), name: initialFile.name }] : [],
+    openFiles: initialFile
+      ? [
+          {
+            id: String(initialFile.id),
+            name: initialFile.name,
+            mimeType: initialFile.mime_type,
+            fileUrl: initialFile.file_url,
+          },
+        ]
+      : [],
     activeFileId: initialFile ? String(initialFile.id) : null,
     fileContents,
     savedFileContents,
@@ -383,15 +416,13 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       });
     }
   },
-  openFile: (fileId, fileName) => set((state) => withOpenFile(state, fileId, fileName)),
-  createEntry: async (parentId, type) => {
-    const { projectId, filesTree } = get();
+  openFile: (file) => set((state) => withOpenFile(state, file)),
+  createEntry: async (parentId, type, name) => {
+    const { projectId } = get();
 
     if (!projectId) {
       return;
     }
-
-    const name = getDefaultEntryName(filesTree, type);
 
     const { status, payload } = await postApi<ProjectFileEntry>(`/api/projects/${projectId}/files`, {
       name,
@@ -442,8 +473,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
             [fileId]: newEntry.snapshot_version ?? 0,
           },
         },
-        fileId,
-        newEntry.name
+        fileNode
       );
 
       return {
@@ -689,7 +719,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
     return true;
   },
   createUntitledFile: async () => {
-    await get().createEntry(null, "file");
+    await get().createEntry(null, "file", getDefaultEntryName(get().filesTree, "file"));
   },
   closeFile: (fileId) =>
     set((state) => {

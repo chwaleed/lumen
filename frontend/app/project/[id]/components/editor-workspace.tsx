@@ -25,6 +25,20 @@ type EditorWorkspaceProps = {
   projectId: string;
 };
 
+function isImageFile(file: { name: string; mimeType?: string | null }) {
+  const normalizedName = file.name.toLowerCase();
+
+  return (
+    file.mimeType?.startsWith("image/") ||
+    normalizedName.endsWith(".png") ||
+    normalizedName.endsWith(".jpg") ||
+    normalizedName.endsWith(".jpeg") ||
+    normalizedName.endsWith(".gif") ||
+    normalizedName.endsWith(".webp") ||
+    normalizedName.endsWith(".svg")
+  );
+}
+
 export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const router = useRouter();
   const theme = useThemeStore((state) => state.theme);
@@ -130,6 +144,13 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
 
   const activeFile = useMemo(() => openFiles.find((file) => file.id === activeFileId) ?? null, [activeFileId, openFiles]);
   const activeFileContent = activeFileId ? fileContents[activeFileId] ?? "" : "";
+  const activeFileIsImage = activeFile ? isImageFile(activeFile) : false;
+
+  useEffect(() => {
+    if (activeFileIsImage) {
+      setEditorInstance(null);
+    }
+  }, [activeFileIsImage, setEditorInstance]);
 
   const isDarkMode = theme === "dark";
   const previewSize = useMemo(() => (sidebarOpen ? 40 : 50), [sidebarOpen]);
@@ -330,13 +351,13 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
           projectName={projectName}
           files={filesTree}
           setSidebarOpen={setSidebarOpen}
-          onOpenFile={(fileId, fileName) => {
+          onOpenFile={(file) => {
             clearSelectionPopup();
-            openFile(fileId, fileName);
+            openFile(file);
           }}
-          onCreateEntry={async (parentId, type) => {
+          onCreateEntry={async (parentId, type, name) => {
             clearSelectionPopup();
-            await createEntry(parentId, type);
+            await createEntry(parentId, type, name);
           }}
           onUploadFile={async (parentId, file) => {
             clearSelectionPopup();
@@ -400,7 +421,22 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
                     </div>
                   </div>
 
-                  {activeFile ? (
+                  {activeFile && activeFileIsImage ? (
+                    <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/10 p-6">
+                      {activeFile.fileUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={activeFile.fileUrl}
+                          alt={activeFile.name}
+                          className="max-h-full max-w-full rounded-md border border-border bg-background object-contain shadow-sm"
+                        />
+                      ) : (
+                        <p className="rounded-md border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                          Image preview unavailable.
+                        </p>
+                      )}
+                    </div>
+                  ) : activeFile ? (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <MonacoLatexEditor
                         value={activeFileContent}

@@ -1,4 +1,4 @@
-import { FileNode } from "./types";
+import type { FileNode } from "./types";
 
 export const initialFiles: FileNode[] = [
   { id: "1", name: "main.tex", type: "file" },
@@ -49,14 +49,24 @@ export function deleteNode(nodes: FileNode[], id: string): FileNode[] {
     });
 }
 
+function sortNodes(nodes: FileNode[]) {
+  return [...nodes].sort((left, right) => {
+    if (left.type !== right.type) {
+      return left.type === "folder" ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+}
+
 export function addNode(nodes: FileNode[], parentId: string, newNode: FileNode): FileNode[] {
   if (parentId === "root") {
-    return [...nodes, newNode];
+    return sortNodes([...nodes, newNode]);
   }
 
   return nodes.map((node) => {
     if (node.id === parentId && node.type === "folder") {
-      return { ...node, children: [...(node.children || []), newNode], isOpen: true };
+      return { ...node, children: sortNodes([...(node.children || []), newNode]), isOpen: true };
     }
     if (node.children) return { ...node, children: addNode(node.children, parentId, newNode) };
     return node;

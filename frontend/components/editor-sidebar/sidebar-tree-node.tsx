@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderPlus, Image as ImageIcon, MoreVertical, Pencil, Trash2, Upload } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileNode } from "./types";
+import { FileNode, PendingCreateEntry } from "./types";
 
 type SidebarTreeNodeProps = {
   node: FileNode;
@@ -16,11 +17,13 @@ type SidebarTreeNodeProps = {
   editingNodeId: string | null;
   editName: string;
   setEditName: (name: string) => void;
+  pendingCreateEntry: PendingCreateEntry | null;
+  renderCreateInput: (level: number) => ReactNode;
   onToggleFolder: (id: string) => void;
   onAddFile: (parentId: string) => void;
   onAddFolder: (parentId: string) => void;
   onUploadFile: (parentId: string) => void;
-  onOpenFile: (fileId: string, fileName: string) => void;
+  onOpenFile: (file: FileNode) => void;
   onStartRename: (nodeId: string, currentName: string) => void;
   onSubmitRename: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
@@ -48,6 +51,8 @@ export function SidebarTreeNode({
   editingNodeId,
   editName,
   setEditName,
+  pendingCreateEntry,
+  renderCreateInput,
   onToggleFolder,
   onAddFile,
   onAddFolder,
@@ -66,6 +71,8 @@ export function SidebarTreeNode({
   const paddingLeft = level * 12 + 8;
   const isDragging = draggedNodeId === node.id;
   const isFolderDropTarget = node.type === "folder" && dropTargetId === node.id && draggedNodeId !== node.id;
+  const childFolders = (node.children ?? []).filter((childNode) => childNode.type === "folder");
+  const childFiles = (node.children ?? []).filter((childNode) => childNode.type === "file");
 
   return (
     <div>
@@ -116,7 +123,7 @@ export function SidebarTreeNode({
       >
         <div
           className="flex items-center flex-1 overflow-hidden cursor-pointer"
-          onClick={() => (node.type === "folder" ? onToggleFolder(node.id) : onOpenFile(node.id, node.name))}
+          onClick={() => (node.type === "folder" ? onToggleFolder(node.id) : onOpenFile(node))}
         >
           {node.type === "folder" ? (
             <>
@@ -216,9 +223,12 @@ export function SidebarTreeNode({
         </DropdownMenu>
       </div>
 
-      {node.type === "folder" && node.isOpen && node.children ? (
+      {node.type === "folder" && node.isOpen ? (
         <div>
-          {node.children.map((childNode) => (
+          {pendingCreateEntry?.parentId === node.id && pendingCreateEntry.type === "folder"
+            ? renderCreateInput(level + 1)
+            : null}
+          {childFolders.map((childNode) => (
             <SidebarTreeNode
               key={childNode.id}
               node={childNode}
@@ -226,6 +236,37 @@ export function SidebarTreeNode({
               editingNodeId={editingNodeId}
               editName={editName}
               setEditName={setEditName}
+              pendingCreateEntry={pendingCreateEntry}
+              renderCreateInput={renderCreateInput}
+              onToggleFolder={onToggleFolder}
+              onAddFile={onAddFile}
+              onAddFolder={onAddFolder}
+              onUploadFile={onUploadFile}
+              onOpenFile={onOpenFile}
+              onStartRename={onStartRename}
+              onSubmitRename={onSubmitRename}
+              onDelete={onDelete}
+              draggedNodeId={draggedNodeId}
+              dropTargetId={dropTargetId}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropTargetChange={onDropTargetChange}
+              onMoveEntry={onMoveEntry}
+            />
+          ))}
+          {pendingCreateEntry?.parentId === node.id && pendingCreateEntry.type === "file"
+            ? renderCreateInput(level + 1)
+            : null}
+          {childFiles.map((childNode) => (
+            <SidebarTreeNode
+              key={childNode.id}
+              node={childNode}
+              level={level + 1}
+              editingNodeId={editingNodeId}
+              editName={editName}
+              setEditName={setEditName}
+              pendingCreateEntry={pendingCreateEntry}
+              renderCreateInput={renderCreateInput}
               onToggleFolder={onToggleFolder}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}

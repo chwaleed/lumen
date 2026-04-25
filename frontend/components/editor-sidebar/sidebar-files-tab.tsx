@@ -1,4 +1,4 @@
-import { FilePlus, FolderPlus, MoreVertical, Pencil, Upload } from "lucide-react";
+import { FilePlus, FileText, Folder, FolderPlus, MoreVertical, Pencil, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarHeader } from "./sidebar-header";
 import { SidebarTreeNode } from "./sidebar-tree-node";
-import { FileNode } from "./types";
+import type { FileNode, PendingCreateEntry } from "./types";
 
 type SidebarFilesTabProps = {
   files: FileNode[];
@@ -22,10 +22,14 @@ type SidebarFilesTabProps = {
   projectNameDraft: string;
   setProjectNameDraft: (name: string) => void;
   onToggleFolder: (id: string) => void;
+  pendingCreateEntry: PendingCreateEntry | null;
+  setPendingCreateName: (name: string) => void;
   onAddFile: (parentId: string) => void;
   onAddFolder: (parentId: string) => void;
+  onSubmitCreate: () => void;
+  onCancelCreate: () => void;
   onUploadFile: (parentId: string) => void;
-  onOpenFile: (fileId: string, fileName: string) => void;
+  onOpenFile: (file: FileNode) => void;
   onStartRename: (entryId: string, currentName: string) => void;
   onSubmitRename: (entryId: string) => Promise<void>;
   onDelete: (entryId: string) => Promise<void>;
@@ -49,9 +53,13 @@ export function SidebarFilesTab({
   isEditingProjectName,
   projectNameDraft,
   setProjectNameDraft,
+  pendingCreateEntry,
+  setPendingCreateName,
   onToggleFolder,
   onAddFile,
   onAddFolder,
+  onSubmitCreate,
+  onCancelCreate,
   onUploadFile,
   onOpenFile,
   onStartRename,
@@ -67,6 +75,39 @@ export function SidebarFilesTab({
   onSubmitProjectRename,
   onCloseSidebar,
 }: SidebarFilesTabProps) {
+  const rootFolders = files.filter((node) => node.type === "folder");
+  const rootFiles = files.filter((node) => node.type === "file");
+
+  const renderCreateInput = (level: number) => {
+    if (!pendingCreateEntry) {
+      return null;
+    }
+
+    const paddingLeft = level * 12 + 32;
+    const Icon = pendingCreateEntry.type === "folder" ? Folder : FileText;
+
+    return (
+      <div className="flex items-center rounded-md py-1.5 pr-2 text-sm" style={{ paddingLeft: `${paddingLeft}px` }}>
+        <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={pendingCreateEntry.name}
+          onChange={(event) => setPendingCreateName(event.target.value)}
+          onBlur={onSubmitCreate}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              onSubmitCreate();
+            }
+            if (event.key === "Escape") {
+              onCancelCreate();
+            }
+          }}
+          className="h-6 w-full bg-background px-1 py-0 text-xs"
+          autoFocus
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full">
       <SidebarHeader
@@ -172,7 +213,8 @@ export function SidebarFilesTab({
               Move to project root
             </div>
           ) : null}
-          {files.map((node) => (
+          {pendingCreateEntry?.parentId === "root" && pendingCreateEntry.type === "folder" ? renderCreateInput(0) : null}
+          {rootFolders.map((node) => (
             <SidebarTreeNode
               key={node.id}
               node={node}
@@ -180,6 +222,35 @@ export function SidebarFilesTab({
               editingNodeId={editingNodeId}
               editName={editName}
               setEditName={setEditName}
+              pendingCreateEntry={pendingCreateEntry}
+              renderCreateInput={renderCreateInput}
+              onToggleFolder={onToggleFolder}
+              onAddFile={onAddFile}
+              onAddFolder={onAddFolder}
+              onUploadFile={onUploadFile}
+              onOpenFile={onOpenFile}
+              onStartRename={onStartRename}
+              onSubmitRename={onSubmitRename}
+              onDelete={onDelete}
+              draggedNodeId={draggedNodeId}
+              dropTargetId={dropTargetId}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropTargetChange={onDropTargetChange}
+              onMoveEntry={onMoveEntry}
+            />
+          ))}
+          {pendingCreateEntry?.parentId === "root" && pendingCreateEntry.type === "file" ? renderCreateInput(0) : null}
+          {rootFiles.map((node) => (
+            <SidebarTreeNode
+              key={node.id}
+              node={node}
+              level={0}
+              editingNodeId={editingNodeId}
+              editName={editName}
+              setEditName={setEditName}
+              pendingCreateEntry={pendingCreateEntry}
+              renderCreateInput={renderCreateInput}
               onToggleFolder={onToggleFolder}
               onAddFile={onAddFile}
               onAddFolder={onAddFolder}

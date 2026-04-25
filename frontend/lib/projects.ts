@@ -47,6 +47,8 @@ export function buildFileTree(entries: ProjectFileEntry[], openNodeIds: Set<stri
         id: String(entry.id),
         name: entry.name,
         type: entry.type,
+        mimeType: entry.mime_type,
+        fileUrl: entry.file_url,
         isOpen: entry.type === "folder" ? openNodeIds.has(String(entry.id)) || parentId === null : undefined,
         children: entry.type === "folder" ? buildNodes(entry.id) : undefined,
       }))

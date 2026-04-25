@@ -3,7 +3,11 @@
 import { useMemo, useRef, useState } from "react";
 import { SidebarAiTab } from "./sidebar-ai-tab";
 import { SidebarFilesTab } from "./sidebar-files-tab";
-import { SidebarProps } from "./types";
+import type { FileNode, PendingCreateEntry, SidebarProps } from "./types";
+
+function getDefaultCreateName(type: FileNode["type"]) {
+  return type === "folder" ? "New Folder" : "untitled.tex";
+}
 
 export function EditorSidebar({
   activeSidebarTab,
@@ -27,7 +31,9 @@ export function EditorSidebar({
   const [uploadParentId, setUploadParentId] = useState<string | null>(null);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [pendingCreateEntry, setPendingCreateEntry] = useState<PendingCreateEntry | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isSubmittingCreateRef = useRef(false);
 
   const findFolderOpenState = (nodes: SidebarProps["files"], id: string): boolean | undefined => {
     for (const node of nodes) {
@@ -120,6 +126,45 @@ export function EditorSidebar({
     fileInputRef.current?.click();
   };
 
+  const handleStartCreate = (parentId: string, type: FileNode["type"]) => {
+    setEditingNodeId(null);
+    setPendingCreateEntry({
+      parentId,
+      type,
+      name: getDefaultCreateName(type),
+    });
+
+    if (parentId !== "root") {
+      setFolderOpenState((currentState) => ({
+        ...currentState,
+        [parentId]: true,
+      }));
+    }
+  };
+
+  const handleSubmitCreate = async () => {
+    if (!pendingCreateEntry || isSubmittingCreateRef.current) {
+      return;
+    }
+
+    const trimmedName = pendingCreateEntry.name.trim();
+    if (!trimmedName) {
+      setPendingCreateEntry(null);
+      return;
+    }
+
+    isSubmittingCreateRef.current = true;
+    const parentId = pendingCreateEntry.parentId === "root" ? null : pendingCreateEntry.parentId;
+    const type = pendingCreateEntry.type;
+    setPendingCreateEntry(null);
+
+    try {
+      await onCreateEntry(parentId, type, trimmedName);
+    } finally {
+      isSubmittingCreateRef.current = false;
+    }
+  };
+
   const handleUploadInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -159,9 +204,15 @@ export function EditorSidebar({
           isEditingProjectName={isEditingProjectName}
           projectNameDraft={projectNameDraft}
           setProjectNameDraft={setProjectNameDraft}
+          pendingCreateEntry={pendingCreateEntry}
+          setPendingCreateName={(name) =>
+            setPendingCreateEntry((currentEntry) => (currentEntry ? { ...currentEntry, name } : currentEntry))
+          }
           onToggleFolder={handleToggleFolder}
-          onAddFile={(parentId) => void onCreateEntry(parentId === "root" ? null : parentId, "file")}
-          onAddFolder={(parentId) => void onCreateEntry(parentId === "root" ? null : parentId, "folder")}
+          onAddFile={(parentId) => handleStartCreate(parentId, "file")}
+          onAddFolder={(parentId) => handleStartCreate(parentId, "folder")}
+          onSubmitCreate={() => void handleSubmitCreate()}
+          onCancelCreate={() => setPendingCreateEntry(null)}
           onUploadFile={handleUploadRequest}
           onOpenFile={onOpenFile}
           onStartRename={handleStartRename}
