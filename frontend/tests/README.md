@@ -98,6 +98,32 @@ opacity 0 instead of completing them.
 Failure screenshots and traces are separate and automatic (`screenshot: "only-on-failure"`,
 `trace: "on-first-retry"`).
 
+## Mocking the network
+
+**Mock axios, never our own modules.** `bun:test`'s `mock.module` is process-global and
+every test file shares one module registry, so a file mocking `@/lib/http/client` breaks
+the tests for that very module once the suite runs together. Tests therefore drive through
+the real client code with only the outermost boundary faked.
+
+`tests/unit/support/axios-mock.ts` owns that single mock and is listed in `bunfig.toml`
+under `preload` — it has to run before any test file, because `lib/http/client.ts` calls
+`axios.create()` at module scope and whichever importer arrives first captures it.
+
+```ts
+import { axiosRequest, respondWithApi, resetAxiosMock } from "../support/axios-mock";
+
+beforeEach(resetAxiosMock);
+
+test("surfaces the server's rejection", async () => {
+  respondWithApi(401, { success: false, message: "Invalid email or password." });
+  // ...
+  expect(axiosRequest).toHaveBeenCalledWith(expect.objectContaining({ url: "/api/auth/login" }));
+});
+```
+
+Zustand stores are module singletons, so capture `getState()` once at the top of the file
+and restore it in `beforeEach` with `setState(INITIAL_STATE, true)`.
+
 ## What belongs where
 
 **Unit** — anything that runs without a DOM: `lib/` helpers, tree/state utilities, Zustand

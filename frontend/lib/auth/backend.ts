@@ -11,7 +11,8 @@ type BackendErrorPayload = {
 
 export type BackendApiResponse<TData> = {
   success: boolean;
-  message: string;
+  // null when the response carried no message; callers supply their own wording.
+  message: string | null;
   data: TData | null;
 };
 
@@ -92,8 +93,10 @@ export async function fetchBackend<TData>(
     });
 
     const payload: BackendApiResponse<TData> = {
-      success: response.data?.success ?? response.status >= 200,
-      message: response.data?.message ?? "Request completed.",
+      // validateStatus lets every status through, so the status must be
+      // range-checked here; `>= 200` alone treats a 500 as a success.
+      success: response.data?.success ?? (response.status >= 200 && response.status < 300),
+      message: response.data?.message || null,
       data: (response.data?.data as TData | null | undefined) ?? null,
     };
 
