@@ -14,6 +14,9 @@
 /coverage
 # Everything a test run produces: screenshots, traces, HTML report.
 /tests/artifacts/
+# Screenshots belong only in tests/artifacts/; this stops a misrouted one
+# from ever being committed as source.
+/tests/**/*.png
 /playwright-report/
 /test-results/
 /playwright/.cache/
