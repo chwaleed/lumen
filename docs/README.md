@@ -22,6 +22,7 @@ docs/
   sdd.md                       design
   decisions/                   ADRs — why specific choices were made
   product/
+    ai-agent-vision.md         assessment of the autonomous-agent direction
     feature-inventory.md       what the product does today, from the code
     requirements.md            TEMPLATE — needs a product owner
     roadmap.md                 PARTIAL — gaps are real, sequencing is not
