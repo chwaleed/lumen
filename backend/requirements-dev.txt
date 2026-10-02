@@ -1,0 +1,6 @@
+-r requirements.txt
+
+pytest==8.4.2
+# Lets create_presigned_upload be tested without real AWS credentials.
+moto[s3]==5.1.21
+httpx==0.28.1
