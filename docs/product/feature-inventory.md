@@ -1,97 +1,152 @@
 # Feature inventory
 
-What Lumen does today, derived by reading the code. Anything the UI implies but does not do
-is listed as such, because a feature list that quietly includes aspirations is worse than
-none.
+The complete product, and how much of it exists. Status is derived from the code, not from
+intent — **Built** means working and tested today.
 
-Requirement IDs refer to the [SRS](../srs.md).
-
-## Accounts
-
-| Feature | Notes |
+| Status | Meaning |
 |---|---|
-| Register with name, email, password | Email unique; password minimum 8 characters |
-| Signed in immediately on registration | No second login step (FR-1.3) |
-| Sign in / sign out | Sign-out revokes that session only |
-| Silent session refresh | Expired 15-minute access tokens refresh before the page renders; the user never sees it (FR-1.7) |
-| Session rotation | A refresh token is single-use — revoked as its replacement is issued (FR-1.8) |
-| Route protection | Anonymous visitors bounce to login; signed-in users bounce off login/signup (FR-1.13, FR-1.14) |
-| Account disable | `is_active = false` blocks login and refresh with a distinct message — no self-serve path to set it |
+| ✅ **Built** | Working, covered by tests |
+| 🟡 **Partial** | UI exists, capability does not |
+| ⬜ **Planned** | Not started |
 
-**Not present:** password reset (the "Forgot?" link goes nowhere), email verification,
-social login, multi-factor, account deletion.
+---
 
-## Projects
+## Primary feature 1 — LaTeX compilation
 
-| Feature | Notes |
-|---|---|
-| Create from a template | `blank` (default), `academic`, `math`, `presentation`, `resume`, `letter` |
-| Seeded starting files | `main.tex` with the template; `academic` adds `references.bib` |
-| List own projects | Scoped to the owner, always |
-| Open with full file tree | One request returns the project and its entries |
-| Rename | Blank names refused |
-| Recency ordering | `updated_at` advances when any file inside changes, not just on rename |
+**Free and unlimited on every plan.** This is the acquisition feature and the foundation
+the agent stands on.
 
-**Not present:** delete a project, duplicate a project, archive, search, tags, sharing.
+| Status | Feature | Notes |
+|---|---|---|
+| 🟡 | Compile a project to PDF | Buttons exist with no handlers; preview shows raw source beneath an "Auto-compile On" badge |
+| ⬜ | Sandboxed compile service | TeX Live container, no shell-escape, CPU/memory/time caps |
+| ⬜ | Multi-pass builds | `latexmk` for bibliography and cross-reference passes |
+| ⬜ | PDF viewer | Page navigation, zoom, source ↔ output sync |
+| ⬜ | Parsed error log | File, line, message — deduplicated, real error first |
+| ⬜ | Error navigation | Click an error, land on the line |
+| ⬜ | Warning surface | Overfull boxes, undefined references, missing citations |
+| ⬜ | Build queue | Jobs, not inline requests; observable depth and wait time |
+| ⬜ | Fair-use protection | Per-user concurrency, build timeout, project size ceiling |
+| ⬜ | Engine selection | pdfLaTeX, XeLaTeX, LuaLaTeX |
 
-## File tree
+## Primary feature 2 — Agentic AI
 
-| Feature | Notes |
-|---|---|
-| Create files and folders | At the root or inside a folder |
-| Rename | Inline, in the sidebar |
-| Move | Drag and drop, including back to the root |
-| Delete | Removes the whole subtree |
-| Sorting | Folders before files, then alphabetical |
-| Expand state preserved | Survives a server refresh of the tree (FR-3.12) |
-| Move guards | A folder cannot move into itself or any descendant, enforced on both client and server (FR-3.7, FR-3.8) |
+**Paid.** The reason anyone subscribes. Depends entirely on compilation existing first.
 
-## Editing
+| Status | Feature | Notes |
+|---|---|---|
+| 🟡 | Chat panel | Prompt entry, expand/collapse — nothing answers it |
+| 🟡 | Selection actions | Proof read / Rewrite / Improve compose a prompt nobody receives |
+| ✅ | Prompt history | Ten most recent, deduplicated — client-side only |
+| ⬜ | Agent tool loop | `list_files`, `read_file`, `write_file`, `compile`, `read_log` |
+| ⬜ | Compile-fix iteration | Build, read the error, fix, repeat until clean |
+| ⬜ | Multi-file editing | Create files, wire them with `\input`, update references |
+| ⬜ | Project index | `\input` graph, `\label`/`\cite` map, section tree — what makes large projects work |
+| ⬜ | Diff review | Show every change before it lands; nothing silent |
+| ⬜ | Task cancellation | Stop a running task, keep partial work |
+| ⬜ | Per-task ceilings | Max compiles, tokens and wall-clock per task |
+| ⬜ | Visual verification | Render pages, check layout with a vision model |
+| ⬜ | Autonomous project creation | Outline → structure → draft → compile → fix |
+| ⬜ | Citation safety | Never invent a reference. Non-negotiable for academic use |
 
-| Feature | Notes |
-|---|---|
-| Monaco editor with LaTeX highlighting | |
-| Multiple open tabs | Re-opening a file reuses its tab and keeps unsaved content (FR-4.3, FR-4.4) |
-| Opens `main.tex` by default | Falls back to the first file |
-| Versioned saves | Every save appends a new immutable snapshot (FR-4.6) |
-| Keystroke coalescing | Adjacent edits merge before transmission, so typing a word is one change (FR-4.7) |
-| Image preview | Image files render as a picture instead of opening as text |
-| Snippet insertion | Equation, figure, table, itemize, enumerate |
-| Panel layout | Toggle editor, preview, sidebar; the last visible panel cannot be closed |
-| Responsive | Sidebar and preview collapse on mobile |
-| Word wrap toggle | |
-| Light and dark themes | Follows the OS preference by default |
+## Secondary feature — Templates
 
-**Not present — and prominently so:** compilation. The Compile and Export PDF buttons have
-no handlers, and the preview panel renders raw LaTeX source beneath a badge reading
-"Auto-compile On" (FR-4.13/14/15).
+First-party only. No third-party sellers.
 
-## Uploads
+| Status | Feature | Notes |
+|---|---|---|
+| ✅ | Built-in starting templates | `blank`, `academic`, `math`, `presentation`, `resume`, `letter` |
+| ✅ | New project from template | Seeds `main.tex`; `academic` adds `references.bib` |
+| 🟡 | Templates page | Route exists; browsing is not a real catalogue |
+| ⬜ | Template catalogue | Browse, preview, search, categorise |
+| ⬜ | Premium templates | One-time purchase, permanent access |
+| ⬜ | Entitlement checks | Who owns what, independent of subscription state |
 
-| Feature | Notes |
-|---|---|
-| Image upload to S3 | Via presigned PUT; bytes never pass through the API |
-| Image types only | Non-image content types rejected |
-| Filename sanitisation | Directory components stripped; the object stays within the project's prefix |
+---
 
-Requires AWS credentials. Without them this is the only part of the app that fails.
+## Platform
 
-## AI assistance
+### Accounts and sessions
 
-| Feature | Notes |
-|---|---|
-| Chat panel | Prompt entry, expand/collapse |
-| Prompt history | Ten most recent, deduplicated, most recent first |
-| Selection actions | Proof read / Rewrite / Improve compose a prompt from the selected text |
+| Status | Feature | Notes |
+|---|---|---|
+| ✅ | Register, sign in, sign out | Email unique, password minimum 8 characters |
+| ✅ | Signed in on registration | No second login step |
+| ✅ | Silent session refresh | Expired access tokens refresh before render |
+| ✅ | Session rotation | Refresh tokens are single-use |
+| ✅ | Route protection | Anonymous bounced to login; signed-in bounced off login/signup |
+| ✅ | Account disable | `is_active = false` blocks login and refresh |
+| ⬜ | Password reset | "Forgot?" links nowhere today |
+| ⬜ | Email verification | |
+| ⬜ | Rate limiting on auth | Nothing slows credential stuffing |
 
-**All client-side.** No backend answers any of it (FR-6.3). The UI is complete; the
-capability is not.
+### Projects and files
 
-## Operations
+| Status | Feature | Notes |
+|---|---|---|
+| ✅ | Create from template, list, open, rename | Scoped to the owner, always |
+| ✅ | Recency ordering | `updated_at` advances when any file inside changes |
+| ✅ | Create, rename, move, delete files and folders | Drag and drop; subtree delete |
+| ✅ | Move guards | A folder cannot move into itself or a descendant — enforced both sides |
+| ✅ | Tree sorting and expand state | Folders first, alphabetical; expansion survives refresh |
+| ⬜ | Delete a project | No endpoint exists |
+| ⬜ | Duplicate, archive, search | |
 
-| Feature | Notes |
-|---|---|
-| Automatic migrations | Run at application startup, so a deploy cannot serve a stale schema |
-| Sentry error reporting | Optional; disabled when `SENTRY_DSN` is empty |
-| Adminer | Database inspection at `:8080` in local compose |
-| 243 automated tests | 98 backend, 121 frontend unit, 24 e2e — none run automatically yet |
+### Editing
+
+| Status | Feature | Notes |
+|---|---|---|
+| ✅ | Monaco editor, LaTeX highlighting | |
+| ✅ | Multiple tabs | Re-opening reuses the tab and keeps unsaved content |
+| ✅ | Versioned saves | Append-only snapshots — *every agent edit will be revertable for free* |
+| ✅ | Keystroke coalescing | Adjacent edits merge before transmission |
+| ✅ | Image preview, snippets, panel layout, word wrap | |
+| ✅ | Light and dark themes | Follows OS preference |
+| ⬜ | Realtime collaboration | Single owner; concurrent edits are last-write-wins |
+
+### Uploads
+
+| Status | Feature | Notes |
+|---|---|---|
+| ✅ | Image upload to S3 | Presigned PUT; bytes never pass through the API |
+| ✅ | Type and filename safety | Images only; directory components stripped |
+| ⬜ | Non-image assets | `.bib`, `.cls`, `.sty` cannot be uploaded — needed for real projects |
+
+### Billing
+
+| Status | Feature | Notes |
+|---|---|---|
+| ⬜ | Plans | Free, Pro, Max |
+| ⬜ | Stripe Checkout and subscriptions | |
+| ⬜ | Webhook → entitlement | Subscription state authoritative in our database |
+| ⬜ | Agent task metering | Count, enforce, show remaining |
+| ⬜ | Template purchases | One-time, permanent |
+| ⬜ | Billing portal | Upgrade, downgrade, cancel, invoices |
+
+### Operations
+
+| Status | Feature | Notes |
+|---|---|---|
+| ✅ | Automatic migrations at startup | Cannot serve a stale schema. Races if instances scale out |
+| ✅ | 243 automated tests | 98 backend, 121 frontend unit, 24 e2e |
+| ✅ | Sentry error reporting | Optional |
+| ⬜ | CI | Nothing runs the tests automatically |
+| ⬜ | Secure cookies | Deliberately disabled until TLS exists |
+| ⬜ | Usage and cost telemetry | Cost per agent task is the number the business turns on |
+
+---
+
+## Where this leaves the product
+
+```
+Platform (accounts, projects, files, editing)   ████████████████████  built
+Templates — basic                               ████████░░░░░░░░░░░░  seeding works, no catalogue
+Compilation                                     ░░░░░░░░░░░░░░░░░░░░  not started
+Agentic AI                                      █░░░░░░░░░░░░░░░░░░░  UI shell only
+Billing                                         ░░░░░░░░░░░░░░░░░░░░  not started
+```
+
+The editor is real and well tested. **Neither primary feature exists yet** — and the second
+cannot start until the first works, because an agent with no compiler is a chatbot. See
+[roadmap.md](roadmap.md) for the order, and
+[ai-agent-vision.md](ai-agent-vision.md) for why compilation is the hard part.
