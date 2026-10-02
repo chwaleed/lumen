@@ -20,9 +20,12 @@ Docker for Postgres + backend, host for the frontend.
 ```bash
 cp .env.example .env          # set JWT_SECRET_KEY, POSTGRES_PASSWORD, AWS keys
 docker compose up -d          # API :9000, adminer :8080 — migrations auto-run on startup
-cd frontend && npm install && npm run dev    # :3000
+cd frontend && bun install && bun dev        # :3000
 ```
 
+- **The frontend uses bun, not npm.** `bun.lock` is the only lockfile and the
+  Dockerfile builds on `oven/bun`. Never run `npm install` here — it creates a
+  competing `package-lock.json`.
 - `requirements.txt` changed → `docker compose up -d --build backend`.
 - Backend tests: `cd backend && pytest` (pytest is not in `requirements.txt`; install it globally).
 - Never develop against the sqlite fallback in `src/core/config.py` — prod is Postgres and the schemas drift.
@@ -40,7 +43,10 @@ cd frontend && npm install && npm run dev    # :3000
 
 ## Frontend
 
-See `frontend/AGENTS.md` first — this is Next.js 16 and its APIs differ from older versions.
+This is **Next.js 16** — APIs, conventions, and file structure differ from older versions.
+Read the relevant guide in `frontend/node_modules/next/dist/docs/` before writing code, and
+heed deprecation notices. (`frontend/AGENTS.md` says the same; Next generates that file, so
+don't hand-edit it.)
 
 - Shared components in `components/`, page-specific in `app/<route>/components/`,
   page state in `app/<route>/use-<route>-hook.ts`.
