@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+# Everything a test run produces: screenshots, traces, HTML report.
+/tests/artifacts/
+/playwright-report/
+/test-results/
+/playwright/.cache/
 
 # next.js
 /.next/

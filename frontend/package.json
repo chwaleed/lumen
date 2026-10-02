@@ -7,7 +7,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "bun run test:unit && bun run test:e2e",
+    "test:unit": "bun test",
+    "test:unit:watch": "bun test --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:local": "playwright test --grep-invert @backend",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report tests/artifacts/report"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -28,7 +35,9 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
+    "@types/bun": "^1.4.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

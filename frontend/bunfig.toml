@@ -1,0 +1,4 @@
+[test]
+# Scope `bun test` to the unit tree so it never tries to run Playwright specs
+# (bun's default glob also matches *.spec.ts).
+root = "tests/unit"

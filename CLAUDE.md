@@ -28,6 +28,25 @@ cd frontend && bun install && bun dev        # :3000
   competing `package-lock.json`.
 - `requirements.txt` changed → `docker compose up -d --build backend`.
 - Backend tests: `cd backend && pytest` (pytest is not in `requirements.txt`; install it globally).
+
+## Testing
+
+Frontend uses **`bun test`** for logic and **Playwright** for flows. A feature owns a
+folder of the same name in both trees — `tests/unit/<feature>/` and `tests/e2e/<feature>/` —
+so adding a feature never means editing config. Read `frontend/tests/README.md` before
+adding tests; it defines the layout, the `@backend` tag, and the screenshot-as-proof rule.
+
+```bash
+cd frontend
+bun run test            # full pipeline
+bun run test:unit       # logic only
+bun run test:e2e:local  # browser flows that need no API
+bun test auth           # one feature
+```
+
+E2E specs take named screenshots via the `proof` fixture, landing in
+`tests/artifacts/screenshots/<feature>/<spec>/<test>/`. Everything under
+`frontend/tests/artifacts/` is gitignored.
 - Never develop against the sqlite fallback in `src/core/config.py` — prod is Postgres and the schemas drift.
 
 ## Backend

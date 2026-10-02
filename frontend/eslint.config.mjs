@@ -13,7 +13,16 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "design/**",
+    "tests/artifacts/**",
   ]),
+  {
+    // Playwright fixtures take a `use` callback, which the React hooks rule
+    // mistakes for React's `use`. Nothing here is a React component.
+    files: ["tests/e2e/**/*.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
