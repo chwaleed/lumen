@@ -121,7 +121,19 @@ talks to it.
 **CI does not run the tests yet.** Adding that, and pointing the backend suite at Postgres
 instead of SQLite, is the main outstanding gap.
 
-## Conventions
+## Documentation
+
+[`docs/`](docs/README.md) holds the project documentation. The two that matter most:
+
+- **[Software Requirements Specification](docs/srs.md)** — numbered requirements, their
+  implementation status, and the known gaps.
+- **[Software Design Document](docs/sdd.md)** — architecture, data design, detailed design,
+  security design.
+
+Alongside those: [architecture decisions](docs/decisions/), a
+[feature inventory](docs/product/feature-inventory.md), the
+[testing strategy](docs/testing/strategy.md), and
+[deployment](docs/operations/deployment.md) and [runbook](docs/operations/runbook.md) notes.
 
 `CLAUDE.md` holds the working standards — commit discipline, backend module layout,
 frontend component and styling rules. Worth a read before your first change.
