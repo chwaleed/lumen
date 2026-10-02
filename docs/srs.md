@@ -1,15 +1,25 @@
 # Software Requirements Specification — Lumen
 
-**Version:** 1.0 · **Status:** Baselined against the implementation as of this commit
+**Version:** 2.0 · **Status:** Specifies the complete product — built and unbuilt
 
-> **How to read this.** Sections 1–4 are **descriptive**: they were derived by reading the
-> code and tests, so they state what Lumen demonstrably does today. Requirements carrying
-> **`[ASSUMED]`** are inferred intent — the behaviour is implemented, but no written source
-> confirms it was the goal. Requirements carrying **`[PROPOSED]`** are not implemented and
-> are listed so the gap is explicit. A product owner should confirm or correct both.
+> **How to read this.** This document covers the whole product, not only what exists. Every
+> requirement carries a status:
+>
+> | Status | Meaning |
+> |---|---|
+> | **Implemented** | Working today, covered by tests |
+> | **Partial** | Some of it exists — the entry says which part |
+> | **Required** | Committed, specified here, not yet built |
+> | **`[PROPOSED]`** | Acknowledged gap, not yet committed to |
+> | **`[ASSUMED]`** | Implemented, but no written source confirms it was the intent |
+>
+> §3.1–3.5 describe the existing editor and were derived by reading the code. §3.6–3.9
+> specify the two primary features and billing, and are derived from
+> [product/requirements.md](product/requirements.md).
 >
 > Each requirement has an ID so design (SDD) and tests can cite it. See
-> [§7 Traceability](#7-traceability).
+> [§6 Implementation status](#6-implementation-status) for what is built and
+> [§7 Traceability](#7-traceability) for what verifies it.
 
 ---
 
@@ -23,12 +33,21 @@ decides what it should do next.
 
 ### 1.2 Scope
 
-Lumen lets a registered user create LaTeX projects, organise them as a file tree, edit
-source in a code editor with version history, and upload images. It runs as a web
-application; there is no desktop or mobile client.
+Lumen is a browser LaTeX editor built around **two primary capabilities**:
 
-**Out of scope today:** LaTeX compilation to PDF, realtime multi-user collaboration,
-project sharing, and the AI assistance the UI gestures at. See §6.
+1. **Compilation** — building any project to PDF, free and unlimited on every plan.
+2. **Agentic AI** — an agent that works across a whole project autonomously: creating and
+   linking files, compiling, reading errors and fixing them. This is the paid feature.
+
+A **secondary** capability, first-party templates, supports both. Supporting these is the
+editor itself: accounts, projects, a file tree, versioned editing and uploads.
+
+Of those, only the editor and basic templates exist today. §3 marks each requirement's
+status; [feature-inventory.md](product/feature-inventory.md) shows the same split visually.
+
+**Out of scope:** realtime multi-user collaboration, project sharing, third-party template
+sellers, a WYSIWYG writing surface, and desktop or mobile clients. See
+[requirements.md §4](product/requirements.md#4-non-goals).
 
 ### 1.3 Definitions
 
@@ -68,6 +87,9 @@ S3 stores uploaded images.
 There is no administrator role, no org or team concept, and no permission tiers. Every
 registered user has identical capability over their own data and none over anyone else's.
 
+Plans (Free, Pro, Max) are **not** roles: they change agent allowance and compile priority,
+never what a user may do with their own projects.
+
 ### 2.3 Operating environment
 
 Modern evergreen browsers (the editor depends on Monaco). Server side: Python 3.13,
@@ -81,6 +103,10 @@ PostgreSQL 16, Node 24 / bun 1.4 runtime, Docker.
 | **C-2** | Session cookies are **not** marked `Secure` — a deliberate temporary measure until TLS and a final domain exist (`lib/auth/cookies.ts`). Must be reversed before any public deployment. |
 | **C-3** | Image uploads require AWS credentials; without them the upload endpoint fails while all else works. |
 | **C-4** | Schema changes must ship as Alembic revisions; migrations run at application startup. |
+| **C-5** | Templates are first-party only. No third-party sellers, so no seller onboarding, payouts or moderation. |
+| **C-6** | Compilation is unlimited on every plan. It must never become a paywall or an upgrade lever. |
+| **C-7** | Agent usage is metered in whole tasks, not tokens, so users can predict what they are buying. |
+| **C-8** | The agent cannot exist before compilation does — it has no way to check its work without a compiler. |
 
 ### 2.5 Assumptions and dependencies
 
@@ -174,13 +200,76 @@ PostgreSQL 16, Node 24 / bun 1.4 runtime, Docker.
 | **FR-5.4** | Image bytes shall go browser-to-S3, never through the API. | Implemented |
 | **FR-5.5** | A presigned URL shall not be issued for another user's project. | Implemented |
 
-### 3.6 AI assistance
+### 3.6 Compilation — *primary feature*
+
+Free and unlimited on every plan. Not implemented; this section specifies it.
 
 | ID | Requirement | Status |
 |---|---|---|
-| **FR-6.1** | A user shall select text and send it for proof-reading, rewriting or improvement. | **Partial** — the UI composes the prompt; nothing processes it |
-| **FR-6.2** | Prompt history shall retain the 10 most recent prompts, deduplicated. | Implemented (client-only) |
-| **FR-6.3** | Prompts shall be answered by a model. | **[PROPOSED]** — no backend exists |
+| **FR-6.1** | A user shall compile a project to PDF and view the result in the editor. | **Required** |
+| **FR-6.2** | Compilation shall be unlimited on every plan, including Free — no monthly quota. | **Required** |
+| **FR-6.3** | Compilation shall run in an isolated sandbox with no shell-escape and hard CPU, memory and wall-clock limits. | **Required** |
+| **FR-6.4** | Builds shall run multiple passes so bibliographies and cross-references resolve. | **Required** |
+| **FR-6.5** | Compilation shall be a queued job, never inline in a request handler. | **Required** |
+| **FR-6.6** | A failed build shall return a parsed log: file, line and message, deduplicated, most significant error first. | **Required** |
+| **FR-6.7** | A user shall click an error and be taken to the offending line. | **Required** |
+| **FR-6.8** | Warnings — overfull boxes, undefined references, missing citations — shall be surfaced separately from errors. | **Required** |
+| **FR-6.9** | A user shall choose an engine: pdfLaTeX, XeLaTeX or LuaLaTeX. | **Required** |
+| **FR-6.10** | A user shall upload `.bib`, `.cls` and `.sty` files, not only images. | **Required** — real projects cannot build without this |
+| **FR-6.11** | Fair-use protections shall cap per-user concurrency, build duration and project size. These shall not function as upgrade levers. | **Required** |
+| **FR-6.12** | A build exceeding any limit shall fail with a message naming the limit, never silently. | **Required** |
+| **FR-6.13** | Paid plans may receive higher concurrency and queue priority. This shall not cap how much a free user may compile. | **Required** |
+
+### 3.7 AI agent — *primary feature*
+
+Paid. Depends entirely on §3.6. Not implemented; this section specifies it.
+
+| ID | Requirement | Status |
+|---|---|---|
+| **FR-7.1** | A user shall give the agent a task in natural language, scoped to one project. | **Required** |
+| **FR-7.2** | The agent shall read, create, modify, move and delete files within that project. | **Required** |
+| **FR-7.3** | The agent shall compile the project and read the resulting log. | **Required** |
+| **FR-7.4** | The agent shall iterate — edit, compile, read the error, fix — until the build is clean or a ceiling is reached. | **Required** |
+| **FR-7.5** | Every task shall carry a hard ceiling on compiles, tokens and wall-clock time. | **Required** |
+| **FR-7.6** | A task reaching its ceiling shall stop and report partial progress, never continue silently. | **Required** |
+| **FR-7.7** | All agent changes shall be presented as a reviewable diff before they are accepted. | **Required** |
+| **FR-7.8** | Every agent edit shall be individually revertable. | **Required** — the append-only snapshot model already provides this |
+| **FR-7.9** | A user shall cancel a running task and keep the work done so far. | **Required** |
+| **FR-7.10** | The agent shall navigate large projects by structure — `\input` graph, `\label`/`\cite` map, section tree — rather than reading every file. | **Required** |
+| **FR-7.11** | The agent shall perform cross-file operations, such as renaming a concept throughout and repairing every reference. | **Required** |
+| **FR-7.12** | **The agent shall never invent a citation.** Every `\cite` key it writes shall exist in the project's bibliography. | **Required — non-negotiable** |
+| **FR-7.13** | The agent shall verify layout visually, not only that the document compiled. | **Required** |
+| **FR-7.14** | The agent shall create a complete project from a description: structure, files, content, clean build. | **Required** |
+| **FR-7.15** | Each task shall produce a transcript: what changed, which files, how many builds. | **Required** |
+| **FR-7.16** | Token, compile and monetary cost shall be recorded per task. | **Required** — pricing cannot be set without it |
+| **FR-7.17** | Prompt history shall retain the 10 most recent prompts, deduplicated. | Implemented (client-side) |
+| **FR-7.18** | Selected text shall be sendable for proof-reading, rewriting or improvement. | **Partial** — UI composes the prompt; nothing answers it |
+
+### 3.8 Plans and billing
+
+| ID | Requirement | Status |
+|---|---|---|
+| **FR-8.1** | Three plans shall exist: Free, Pro and Max. | **Required** |
+| **FR-8.2** | Plans shall differ only in agent task allowance and compile priority — never in compile quota. | **Required** |
+| **FR-8.3** | A user shall subscribe, upgrade, downgrade and cancel without contacting support. | **Required** |
+| **FR-8.4** | Subscription state shall be authoritative in Lumen's own database, updated by provider webhook. | **Required** |
+| **FR-8.5** | Agent tasks shall be metered per billing period, with the remaining count visible before a task starts. | **Required** |
+| **FR-8.6** | A user who exhausts their allowance shall retain full access to compilation, their projects and their files. | **Required** |
+| **FR-8.7** | Premium templates shall be one-time purchases granting permanent access, independent of subscription state. | **Required** |
+| **FR-8.8** | Payment failure shall downgrade capability, never destroy or lock away user data. | **Required** |
+
+### 3.9 Templates — *secondary feature*
+
+First-party only. No third-party sellers (SRS C-5).
+
+| ID | Requirement | Status |
+|---|---|---|
+| **FR-9.1** | A user shall create a project from a template. | Implemented |
+| **FR-9.2** | Six built-in templates shall be available: `blank`, `academic`, `math`, `presentation`, `resume`, `letter`. | Implemented |
+| **FR-9.3** | A user shall browse, preview and search a template catalogue. | **Required** |
+| **FR-9.4** | Templates shall be categorised — thesis, paper, presentation, CV, book. | **Required** |
+| **FR-9.5** | Some templates shall be purchasable; the rest free. | **Required** |
+| **FR-9.6** | Every template shall compile cleanly before being published. | **Required** — a template that does not build is worse than none |
 
 ---
 
@@ -239,6 +328,42 @@ PostgreSQL 16, Node 24 / bun 1.4 runtime, Docker.
 | **NFR-P3** | Image uploads shall not occupy an API worker. | Implemented |
 | **NFR-P4** | Quantified latency and throughput targets. | **[PROPOSED]** — none defined; no load testing done |
 
+### 4.6 Capacity
+
+Sized by **compiles per second**, not by user count — an idle editing user is nearly free,
+a compiling one holds a CPU core. See
+[ai-agent-vision.md §8](product/ai-agent-vision.md#8-how-many-concurrent-users-to-build-for).
+
+| ID | Requirement | Status |
+|---|---|---|
+| **NFR-C1** | The initial target shall be 100 concurrent users, with the architecture permitting 500 by adding workers rather than redesign. | **Required** |
+| **NFR-C2** | Compile workers shall be stateless and horizontally scalable. | **Required** |
+| **NFR-C3** | Queue depth, wait time and throughput shall be observable; queue depth is the signal to scale. | **Required** |
+| **NFR-C4** | The database connection pool shall be sized deliberately. | **Not met** — SQLAlchemy defaults give 15 connections against a 40-thread request pool |
+| **NFR-C5** | Running more than one backend instance shall not race on migrations. | **Not met** — migrations run at startup (ADR 0002) |
+| **NFR-C6** | A single user or runaway task shall not be able to starve the shared compile fleet. | **Required** |
+
+### 4.7 Cost
+
+| ID | Requirement | Status |
+|---|---|---|
+| **NFR-K1** | Token, compile and monetary cost shall be recorded per agent task from the first task run. | **Required** — the business turns on this number |
+| **NFR-K2** | Per-task ceilings shall bound the worst-case cost of any single task. | **Required** |
+| **NFR-K3** | Free-tier compilation cost shall be monitored, being revenue-free by design. | **Required** |
+
+### 4.8 Agent safety
+
+Separate from §4.1 because the threat is different: here the risk is damage to the user's
+own work, not an attacker.
+
+| ID | Requirement | Status |
+|---|---|---|
+| **NFR-A1** | No agent change shall reach a user's project without being reviewable. | **Required** |
+| **NFR-A2** | Every agent change shall be revertable. | **Required** — append-only snapshots already provide the mechanism |
+| **NFR-A3** | The agent shall act only within the project it was given. | **Required** |
+| **NFR-A4** | The agent shall not fabricate citations, references or sources. | **Required — non-negotiable** |
+| **NFR-A5** | Agent-authored content shall be distinguishable from user-authored content. | **Required** |
+
 ---
 
 ## 5. External interfaces
@@ -263,21 +388,30 @@ server supplied none, so each client supplies its own wording. Full endpoint tab
 
 ---
 
-## 6. Known gaps
+## 6. Implementation status
 
-Consolidated from the `[PROPOSED]` entries above, because these are what a reader most
-needs to know:
+The editor is built and tested. **Neither primary feature exists yet.**
 
-1. **No LaTeX compilation.** The core value proposition of a LaTeX editor is unimplemented;
-   the preview shows source while claiming to auto-compile (FR-4.13/14/15).
-2. **No AI backend.** The chat and selection actions compose prompts nobody answers (FR-6.3).
-3. **No password reset** (FR-1.15) and **no project deletion** (FR-2.9).
-4. **Cookies are not `Secure`** (NFR-S5) — must be fixed before public deployment.
-5. **No rate limiting** on authentication (NFR-S9).
-6. **No collaboration or conflict resolution** (NFR-R5).
-7. **No performance targets** and no load testing (NFR-P4).
+| Area | Status |
+|---|---|
+| Accounts, projects, file tree, editing, uploads (§3.1–3.5) | Built and tested |
+| Templates — seeding only (§3.9 FR-9.1, FR-9.2) | Built |
+| **Compilation (§3.6)** | **Not started.** The preview shows raw source beneath an "Auto-compile On" badge, and both PDF buttons are inert |
+| **AI agent (§3.7)** | **UI shell only.** The chat panel and selection actions compose prompts nothing answers |
+| **Plans and billing (§3.8)** | Not started |
+| Template catalogue and purchases (§3.9 FR-9.3–9.6) | Not started |
 
----
+Still outstanding on the platform itself:
+
+1. **Cookies are not `Secure`** (NFR-S5, C-2) — must be fixed before public deployment.
+2. **No rate limiting** on authentication (NFR-S9).
+3. **No CI** — nothing runs the 243 tests automatically.
+4. **Connection pool and migration race** (NFR-C4, NFR-C5) block horizontal scaling.
+5. **No password reset** (FR-1.15), **no project deletion** (FR-2.9), **no email verification**.
+6. **Only images can be uploaded** (FR-6.10) — `.bib`, `.cls` and `.sty` are needed before
+   any real project can compile.
+
+Order of work: [roadmap.md](product/roadmap.md).
 
 ## 7. Traceability
 
@@ -303,4 +437,7 @@ Requirements are verified by the test suite. Representative mapping:
 | NFR-R2 | `backend/tests/unit/db/test_migrations.py` |
 | NFR-R4, NFR-U2 | `frontend/tests/unit/http/client.test.ts` |
 
-Requirements with no test are the `[PROPOSED]` ones — they are not implemented.
+Requirements in §3.6–3.8 have no tests because they are not implemented. Each phase in the
+[roadmap](product/roadmap.md) is expected to land its tests with its code, under the same
+feature-folder convention (ADR 0004) — `compile/`, `agent/` and `billing/` folders in each
+test tree.

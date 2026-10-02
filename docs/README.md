@@ -9,10 +9,10 @@
 
 Read the SRS first, then the SDD. Everything else here supports those two.
 
-> Both were written by reading the code, so they describe what is true now rather than what
-> was once planned. The SRS marks inferred intent `[ASSUMED]` and unimplemented capability
-> `[PROPOSED]`, so the difference between "designed this way" and "turned out this way"
-> stays visible.
+> The SRS specifies the **complete product** — the two primary features (LaTeX compilation
+> and agentic AI) plus templates — and marks each requirement as Implemented, Partial,
+> Required, `[PROPOSED]` or `[ASSUMED]`. The SDD describes the built system in §1–7 and
+> designs the unbuilt subsystems in §8. Neither pretends an intention is a fact.
 
 ## Everything else
 
@@ -60,11 +60,13 @@ If they need it before changing a design, it belongs here.
 
 | Area | Status |
 |---|---|
-| SRS, SDD, ADRs | Written and current |
+| SRS, SDD, ADRs | Written and current — SRS covers the complete product, built and unbuilt |
+| Product requirements, roadmap | Defined. Prices and dates remain open |
 | Testing strategy | Current — 243 tests |
 | Operations | Written; describes a deployment that does not exist yet |
-| Product requirements, roadmap sequencing | **Templates** — need a product owner |
-| LaTeX compilation | **Not implemented.** The preview shows source beneath an "Auto-compile On" label |
+| **LaTeX compilation** (primary) | **Not started.** The preview shows source beneath an "Auto-compile On" label |
+| **Agentic AI** (primary) | **UI shell only.** Nothing answers a prompt |
+| Billing | **Not started** |
 | CI | **None.** Deploy workflow commented out; nothing runs the tests |
 | Secure cookies | **Disabled** deliberately; must be enabled before public deployment |
 | Test database parity | **Gap.** Tests on SQLite, production on Postgres 16 |
