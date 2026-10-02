@@ -1,4 +1,0 @@
-interface:
-  display_name: "Frontend Component Standards"
-  short_description: "Enforce frontend hierarchy, component splitting, and styling rules."
-  default_prompt: "Apply the frontend standards for structure, component-size splitting, naming, styling, and Zustand patterns to this change."
