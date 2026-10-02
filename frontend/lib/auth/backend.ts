@@ -1,9 +1,7 @@
 import axios from "axios";
 
-const DEFAULT_BACKEND_URL =
-  process.env.ENVIRMENT === "development"
-    ? "http://localhost:9000"
-    : "http://backend:9000";
+// Docker sets BACKEND_URL to the internal service address; local dev hits the published port.
+const DEFAULT_BACKEND_URL = "http://localhost:9000";
 
 type BackendErrorPayload = {
   success?: boolean;
