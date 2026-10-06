@@ -195,13 +195,21 @@ TeX Live ships one frozen set per year, identical on every platform. "Built with
 
 Sizes, from TeX Live's own figures (January 2026) and the Island of TeX images:
 
-| Scheme | Installed size | Contains |
+**Measured from the registry manifests** (amd64, 2026-10-06) rather than quoted — the
+published figures for these images disagree with each other:
+
+| Tag | Download (compressed) | Contains |
 |---|---|---|
-| `scheme-basic` | ~116 MB (no docs/src) | Plain TeX + LaTeX, little else |
-| `scheme-small` | ~400 MB image | Adds XeTeX, MetaPost, recommended packages |
-| `scheme-medium` | ~800 MB image | |
-| `scheme-full` | **~4,312 MB** (no docs/src) | Everything shippable from CTAN |
-| `scheme-full` + docs + src | ~7.9 GB (~8.7 GB on disk) | Docs alone are 3.7 GB; fonts 2.9 GB |
+| `latest-minimal` | **0.34 GB** | Barely more than plain TeX |
+| `latest-small` | **0.59 GB** | Adds XeTeX, MetaPost, recommended packages |
+| `latest-medium` | **0.89 GB** | |
+| `latest` = `latest-full` | **2.56 GB** | Everything from CTAN, no docs/src. *Identical digest* |
+| `latest-doc` | 6.64 GB | + 3.7 GB of manuals |
+| `latest-doc-src` | 6.77 GB | + package sources |
+
+TeX Live's own installed-size figures for comparison: `scheme-basic` ~116 MB,
+`scheme-full` ~4,312 MB without docs or sources, ~7.9 GB with them (docs alone 3.7 GB,
+fonts 2.9 GB).
 
 **Recommendation: full scheme, without documentation or sources.** ~4.3 GB.
 
@@ -222,16 +230,30 @@ Dropping docs and sources removes ~3.7 GB for free, since nothing server-side re
 
 The official `texlive/texlive` image on Docker Hub, maintained by **Island of TeX**:
 
-- `latest` is the full scheme, rebuilt **weekly**, currently ~2.5 GB compressed.
-- Variants: base (no docs/src), `-doc`, `-src`, `-doc-src`.
-- **Pinnable** via `TL{YEAR}-{MONTH}-{DAY}-{HOUR}-{MINUTE}` tags, plus `TL{YEAR}-historic`
-  for past years. Historic images are rebuilt monthly for OS security patches.
+- `latest` is the full scheme, rebuilt **weekly**, measured at 2.56 GB compressed.
+- Two independent dimensions: **scheme** (`minimal`, `basic`, `small`, `medium`, `full`,
+  `context`) and **content** (base, `-doc`, `-src`, `-doc-src`), plus a `pretest` line for
+  the next release.
 - Dockerfiles are MIT; the bundled software keeps its own terms.
 
-**Pin an explicit tag. Never deploy `latest`.** A weekly-rebuilt `latest` means TeX Live can
-change under us without a deploy, which is precisely the reproducibility property we chose
-TeX Live to get. Treat a TeX Live upgrade as a deliberate, tested migration — Overleaf
-treats it the same way, as a versioned per-project setting.
+**Pin by digest, not by tag.** This matters more than it sounds. Docker Hub's description
+advertises immutable `TL{YEAR}-{MONTH}-{DAY}-{HOUR}-{MINUTE}` tags, but **the registry has
+none** — a full tag listing (2026-10-06) returns `TL2013`–`TL2025`, every one of them a
+`-historic` variant. The *current* release is reachable only through mutable `latest*` tags.
+
+So there is no immutable tag for the TeX Live we would deploy, and `latest` is rebuilt
+weekly, which would let TeX Live change under us without a deploy — precisely the
+reproducibility property we chose TeX Live to get. The only immutable reference available is
+the digest:
+
+```
+texlive/texlive@sha256:f1c4d2c23f297caee8654dc23eed022c854ca59e899e40666abbd4...
+```
+
+A dated immutable tag becomes available for TeX Live 2026 only once 2027 ships and
+`TL2026-historic` appears. Until then, the digest is the pin. Treat a TeX Live upgrade as a
+deliberate, tested migration — Overleaf treats it the same way, as a versioned per-project
+setting.
 
 **Open question worth deciding early:** whether projects pin a TeX Live *year* the way
 Overleaf does. Supporting multiple years means storing several 4 GB images, but it is the

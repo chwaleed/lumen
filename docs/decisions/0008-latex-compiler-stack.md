@@ -41,13 +41,21 @@ runs the other way, since models are trained overwhelmingly on pdfLaTeX-targeted
 |---|---|
 | **Orchestrator** | **`latexmk`**, with `-interaction=nonstopmode`, `-file-line-error`, `-synctex=1` |
 | **Engine** | **pdfLaTeX by default.** All three wired (`-pdf` / `-pdfxe` / `-pdflua`) and stored as a per-project value; only pdfLaTeX is *supported* in Phase 1 |
-| **Distribution** | **TeX Live full scheme, no docs or sources** — `texlive/texlive`, pinned to an explicit dated tag. 2.56 GB compressed, ~4.5 GB on disk |
+| **Distribution** | **TeX Live full scheme, no docs or sources** — `texlive/texlive`, **pinned by digest**. 2.56 GB compressed, ~4.5 GB on disk |
 | **Build vs buy** | **Our own service in Python, modelled on CLSI's architecture**, depending on no part of it |
 | **Isolation** | **One throwaway container per compile**: `--network=none`, non-root, read-only TeX tree, `tmpfs` output with a size cap, hard CPU/memory/PID/wall-clock caps, all capabilities dropped. In `texmf.cnf`: `shell_escape=f`, `openin_any=p`, `openout_any=p` |
 | **Compile profiles** | **Two.** A single-pass `-draftmode` *fast check* for the agent's inner loop, and a full `latexmk` build for users and the agent's final pass |
 
 `openin_any` defaults to `a` — read any file — which is an arbitrary-file-read primitive
 enabled out of the box. It must be changed explicitly.
+
+**On pinning.** The first draft of this ADR said "pinned to an explicit dated tag", on the
+strength of Docker Hub's description advertising `TL{YEAR}-{MONTH}-{DAY}-{HOUR}-{MINUTE}`
+tags. A full tag listing on 2026-10-06 shows **no such tags exist** — the registry carries
+`TL2013`–`TL2025`, all `-historic`, and the current release only through mutable `latest*`
+tags. The intent is unchanged (pin immutably, never track `latest`); the only mechanism that
+delivers it today is the **digest**. A dated tag for TeX Live 2026 appears only once 2027
+ships and `TL2026-historic` is published.
 
 ## Consequences
 
