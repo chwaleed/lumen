@@ -24,8 +24,11 @@ docs/
   product/
     ai-agent-vision.md         assessment of the autonomous-agent direction
     feature-inventory.md       what the product does today, from the code
-    requirements.md            TEMPLATE — needs a product owner
-    roadmap.md                 PARTIAL — gaps are real, sequencing is not
+    requirements.md            the product, its users and the business model
+    roadmap.md                 the order of work, and the risks that set it
+  research/                    investigations that precede a decision
+    latex-compiler-selection.md  which compiler to build Phase 1 on
+    compiler-research-prompt.md  the same question, portable to other models
   testing/strategy.md          what we test, what we don't, and why
   operations/
     deployment.md              how a release reaches a server
