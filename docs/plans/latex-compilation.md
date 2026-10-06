@@ -357,23 +357,63 @@ DELETE /projects/{id}/compile/{job_id}     → cancel
 
 ## M5 — Parsed errors and navigation
 
-**This is a subproject, not a line item.** The agent's accuracy in Phase 2 will be bounded
-by it, and declining CLSI (ADR 0008) means declining the best existing parser.
+**Prototyped during M0, and it is less risky than feared.** The findings below replace the
+earlier "this is a subproject, not a line item" framing — it is still real work, but the
+shape is now known.
 
-- [ ] Parse to `(file, line, severity, message)`. `-file-line-error` exists to make this
-      tractable — it is already in the flag set
-- [ ] Deduplicate. LaTeX produces one real error as fifty messages, and the **real error
-      must come first**
-- [ ] Surface warnings separately: overfull boxes, undefined references, missing citations
+### What M0 established
+
+**`-file-line-error` resolves subfile attribution correctly.** The hard case I expected to
+fight — an error buried inside an `\input`-ed file, where the line number could refer to the
+wrong file — just works: pdfTeX reports `./sections/bad.tex:1: Missing $ inserted.` **This
+retires the largest M5 risk.**
+
+**Do not reuse `texoutparse`.** Measured against seven broken documents, it found errors in
+only 2 of 7 and **never returned a file or line**. It recognises the default `! message`
+format and misses the `file:line: message` format that `-file-line-error` produces — the one
+format we need. Its warning extraction is good (3/3 on undefined refs and citations).
+
+**A ~90-line parser got 6/7 root-cause-first**, with correct file and line:
+
+| Broken document | Root cause located |
+|---|---|
+| `undefined_command` | ✅ `./undefined_command.tex:4` |
+| `missing_dollar` (cascades to 2 errors) | ✅ `:4` — correct one ranked first |
+| `bad_environment` | ✅ `:6` |
+| `nested_error` (error inside `\input`) | ✅ `./sections/bad.tex:1` |
+| `missing_package` | ✅ `:2` — recovered by searching sources for the `\usepackage` |
+| `undefined_reference` | ✅ warnings, line 4, separated from errors |
+| `unbalanced_brace` | ❌ **no location exists in the log** |
+
+The prototype and corpus are in `~/lumen-m0/` (`parse_proto.py`, `corpus/broken/`).
+
+### The residual difficulty
+
+Not parsing. These three:
+
+1. **Errors with no location at all.** `! File ended while scanning use of \textbf.` carries
+   no file and no line. This is the genuinely hard class and it needs source-side inference —
+   for `missing_package` the prototype recovered the line by searching the sources for the
+   matching `\usepackage`, and the same trick will not generalise to brace mismatches.
+2. **Misleading locations.** `missing_package` logs `Emergency stop` at line 3 while the real
+   `\usepackage` is on line 2. **Follow-on lines must be suppressed, not ranked** — otherwise
+   the agent is sent to the wrong line, which is worse than no help.
+3. **Cascades.** One missing `$` produced errors on lines 4 and 5. Dedup and correct ranking
+   are what make the output usable.
+
+### Work
+
+- [ ] Parse to `(file, line, severity, message)` from `-file-line-error` output
+- [ ] Suppress follow-ons (`Emergency stop`, `==> Fatal error`) rather than reporting them
+- [ ] Deduplicate cascades; **rank the real error first**
+- [ ] Source-side inference for unlocated errors, starting with missing files/packages
+- [ ] Warnings surfaced separately: undefined references, undefined citations, overfull boxes
 - [ ] Click an error → open the file, scroll to the line
-- [ ] Study before writing: `texoutparse` (Python, closest to our stack), `texlogsieve`
-      (good deduplication), Overleaf's JS parser (most battle-tested — **check its licence**)
-- [ ] Build the hard-case corpus now: wrong line numbers, cascading failures, errors inside
-      `\input`-ed files, missing `.sty`, unresolved citations
+- [ ] Grow the broken corpus — it is already the regression suite, and it is cheap to extend
+- [ ] Reconsider Overleaf's JS parser only if our own stalls; **check its licence first**
 
-**Done when** the broken documents from M0 each produce one correct, clickable first error.
-
----
+**Done when** every document in the broken corpus yields one correct, clickable first error,
+and the two unlocatable classes degrade honestly rather than pointing somewhere wrong.
 
 ## M6 — Non-image uploads
 
@@ -487,7 +527,7 @@ frontend/tests/e2e/compile/      submit → PDF appears; broken doc → clickabl
 | **Per-compile latency too high for the agent** | M0 measures it. Levers in order: warm per-user pools, persisted `.aux`, `-draftmode`, precompiled preambles |
 | **Throwaway containers vs warm caches** | Caches live outside the container, keyed per project, remounted per job |
 | **A document needs a package we do not ship** | Full scheme specifically to avoid this. Log every missing-package failure from day one — that log is the signal |
-| **Log parser sends the agent to the wrong line** | Worse than no help. Build the hard-case corpus in M5, before the agent exists |
+| **Log parser sends the agent to the wrong line** | Worse than no help. Corpus and a 6/7 prototype exist (M5); the residual risk is the errors carrying no location at all |
 | **An incumbent ships this first** | Overleaf already has the compile infrastructure and needs only to add the agent — the easier half. Speed matters, and Phase 3 is where we win |
 
 ---
