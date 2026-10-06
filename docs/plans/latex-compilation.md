@@ -20,7 +20,7 @@ its own work.
 
 ---
 
-## M0 — Measure first — **DONE (2026-10-06)**
+## M0 — Measure first — **DONE (2026-10-06/07)**
 
 Measured on the dev machine: 12 cores, 23 GB RAM, `texlive/texlive:latest` (TeX Live 2026).
 **Caveat on every number: ~20 other containers were running** (Postgres, the Supabase stack),
@@ -41,8 +41,10 @@ article, and 9 deliberately broken documents.
 Small 2-page article, for comparison: pdfLaTeX 1.3 s full / 0.66 s check, XeLaTeX 1.7 s,
 LuaLaTeX 1.06 s.
 
-**The check profile is 5× faster than the full build.** That is ADR 0008's two-profile design
-justified by measurement rather than assumption.
+**A cold single pass is 5× faster than a cold full build** — but see the incremental
+measurements below: this gap is latexmk doing 3–4 passes plus biber plus makeindex on
+unconverged references, and it **does not survive into the warm case**, which is what the
+agent actually does.
 
 **XeLaTeX is not slower than pdfLaTeX on a real document** — 36.0 s vs 35.9 s. The widely
 repeated "pdfLaTeX is 2× faster" claim measures engine *startup* on a hello-world, which is
@@ -51,6 +53,30 @@ training distribution, but **not on speed grounds** at this document size.
 
 Warm-rebuild numbers are **not reported**: latexmk keys off its `.fdb_latexmk` database, not
 mtimes, so `touch` does not force a rebuild and the figures were measuring a no-op.
+
+### Incremental rebuild — the number that actually prices the agent
+
+Measured after a converged full build, by appending a sentence to one section file of 72:
+
+| Operation | Time |
+|---|---|
+| Cold full build (converges aux + biber + index) | 34.2 s |
+| `latexmk` no-op, nothing changed | **0.44 s** |
+| **Full `latexmk` rebuild after a one-file edit** | **6.8–8.2 s** |
+| Single-pass `-draftmode` rebuild after a one-file edit | 7.6–8.4 s |
+
+**The check profile is not faster warm — it is marginally slower.** This removed the
+two-profile design; see [ADR 0010](../decisions/0010-one-compile-profile.md). The 5× cold win
+was latexmk doing 3–4 passes plus biber plus makeindex on unconverged references, not
+`-draftmode`.
+
+`-draftmode` measured directly on a deliberately image-heavy document (30 PNGs, 23 MB) saved
+**13%** — 697 ms against 604 ms — not the 5–10× that circulates online. pdfTeX passes raster
+images through without recompression, so there is little to skip.
+
+**So an agent iteration costs ~7 s, and 20 iterations ~140 s plus one cold build.** That is
+the figure to price plans against. It depends entirely on the per-project `.aux`/`.fdb_latexmk`
+cache surviving between compiles: **lose the cache and every iteration costs 36 s, not 7 s.**
 
 ### Container overhead and image
 
@@ -94,8 +120,8 @@ host before sizing anything.
 > free compilation of thesis-sized documents is therefore materially more expensive than the
 > earlier sizing assumed, and this is very likely why Overleaf's free tier stops at a 10 s
 > timeout — **our corpus cannot be compiled on Overleaf free at all.** The model still works,
-> but it depends on the check profile, on caching, and on fair-use concurrency limits
-> mattering more than expected. Feed this into
+> but it depends on warm-cache rebuilds (~7 s, below) rather than cold ones, and on
+> fair-use concurrency mattering more than expected. Feed this into
 > [requirements.md §6](../product/requirements.md).
 
 ### Security findings — all three are real and reproducible
@@ -164,11 +190,17 @@ makeindex, memoize-extract.pl, memoize-extract.py, repstopdf, r-mpost,
 texosquery-jre8
 ```
 
-**`latexminted` is on the allowlist**, which means `minted` may work under *restricted*
-shell escape (`shell_escape = p`) without `-shell-escape`. That materially weakens ADR 0008's
-`shell_escape = f`, and **re-opens the minted question**: restricted mode is a curated
-allowlist vetted by the TeX Live security team, not blocklist whack-a-mole. The counterweight
-is `texosquery-jre8`, which exists to expose OS information to documents. **Open decision.**
+**`latexminted` is on the allowlist**, and testing on fresh directories settled the question:
+
+| Configuration | minted |
+|---|---|
+| `shell_escape = f` (ADR 0008's original choice) | **fails** — "Cannot highlight code", PDF produced but unhighlighted, errors in the log |
+| `shell_escape = p` (restricted), no flag | **works fully** — cache written, no errors |
+
+`\immediate\write18{...}` of an arbitrary command stays **blocked** under restricted mode.
+Combined with `\input` already being unrestricted (above), this reversed the decision — see
+[ADR 0009](../decisions/0009-use-restricted-shell-escape.md). **`minted` works; the `listings`
+fallback is not needed.**
 
 Defaults as shipped, confirmed: `shell_escape = p`, **`openin_any = a`**, `openout_any = p`.
 
@@ -199,9 +231,11 @@ bibliography failure is exactly the kind of bug that reaches a user as "my citat
 
 ### Still open
 
-- [ ] **gVisor comparison not run** — `runsc` is not installed and installing it needs root.
-      This is the measurement that decides whether strong isolation is affordable, and
-      ADR 0008's "gVisor before public launch" stays unverified until it runs.
+- [ ] **gVisor comparison not run.** `runsc` is not installed, the host has no passwordless
+      sudo, and this machine's Snap Docker could not host it anyway. Needs a Docker CE host
+      and an interactive install. This is the measurement that decides whether strong
+      isolation is affordable, and ADR 0008's "gVisor before public launch" stays unverified
+      until it runs.
 - [ ] Re-measure the concurrency knee on a **dedicated** host; these figures share a box with
       ~20 containers.
 - [ ] Measure with **real** theses rather than a generated corpus. The generated one is
@@ -214,12 +248,16 @@ Prove the image, flags and hardening in isolation before any code depends on the
 - [ ] Pin a dated tag (`texlive/texlive:TL2026-...`). **Never `latest`** — it is rebuilt
       weekly, which defeats the reproducibility TeX Live was chosen for
 - [ ] Build a thin `lumen-tex` image on it, carrying only an overridden `texmf.cnf`
-- [ ] Set `shell_escape=f`, `openin_any=p`, `openout_any=p`. `openin_any` ships as `a`,
-      meaning read any file, so this is a real change and not a formality
+- [ ] Set `shell_escape=p`, `openin_any=p`, `openout_any=p`
+      ([ADR 0009](../decisions/0009-use-restricted-shell-escape.md)). `openin_any` ships as
+      `a` — read any file — so this is a real change and not a formality. **Never pass
+      `-shell-escape`**, which turns restricted into unrestricted
 - [ ] Write the `docker run` invocation from the hardening checklist below
-- [ ] Verify the attacks fail: `\input{/etc/passwd}` yields nothing, `\write18{...}` is
-      refused, an infinite macro loop is killed by the wall-clock cap, a memory bomb hits the
-      cgroup limit rather than the host
+- [ ] Verify, and expect these specific results from M0: `\write18{id}` **refused**;
+      `\openin` of `/etc/passwd` **blocked**; `\input{/etc/passwd}` **still succeeds** —
+      the container is the only barrier; a runaway loop killed by `docker kill` **by name**;
+      a memory bomb hitting the cgroup limit rather than the host
+- [ ] Verify no secret in the container environment reaches a log via `/proc/self/environ`
 - [ ] Verify a real thesis from the M0 corpus builds, with bibliography resolved
 
 **Done when** the exact command line that the service will shell out to is written down and
@@ -364,23 +402,23 @@ upgrades. A normal user must never meet them.
 
 ---
 
-## The two compile profiles
+## One compile profile
 
-Build both now even though only `full` is reachable in Phase 1. The `check` profile is what
-makes the Phase 2 agent affordable, and retrofitting it means reworking the worker.
+[ADR 0010](../decisions/0010-one-compile-profile.md) replaced the planned two profiles with
+one, because M0 measured the warm rebuild and the check profile was not faster.
 
-| | `check` — agent inner loop | `full` — users, agent final pass |
-|---|---|---|
-| Driver | engine directly | `latexmk` |
-| Passes | one | as many as needed |
-| `-draftmode` | **yes** | no |
-| Bibliography | skipped | `biber`/`bibtex` |
-| `-halt-on-error` | yes | no — users want the whole log |
-| SyncTeX | no | yes |
-| Output | log only | PDF + log + synctex |
-| Goal | lowest latency to an error | correctness |
+**`latexmk` for users and for the agent.** The agent varies *flags*, not profiles:
 
----
+| | |
+|---|---|
+| `-halt-on-error` | Agent wants the first error only; omit it when a user wants the whole log |
+| `latexmk`'s own change detection | Is the optimisation. Its 0.44 s no-op also answers "did anything change?" |
+
+Always: `-interaction=nonstopmode`, `-file-line-error`, `-synctex=1`.
+
+**Warm state is load-bearing, not an optimisation.** The per-project `.aux`/`.fls`/`.fdb_latexmk`
+cache is what makes an agent iteration 7 s instead of 36 s. Treat losing it as a performance
+incident.
 
 ## Hardening checklist
 
@@ -398,15 +436,24 @@ Every compile, without exception:
 --security-opt seccomp=<profile>
 ```
 
-Plus a supervisor-side wall-clock kill, and `texmf.cnf` with `shell_escape=f`,
+Plus a supervisor-side wall-clock kill, and `texmf.cnf` with
+**`shell_escape=p`** ([ADR 0009](../decisions/0009-use-restricted-shell-escape.md)),
 `openin_any=p`, `openout_any=p`.
 
-**Disabling shell escape is safe here** because `latexmk` invokes `bibtex`/`biber` and
-`makeindex` directly as processes — it does not need `\write18`.
+Also required, from M0:
 
-**It breaks `minted` and `gnuplottex`.** `minted` is common in CS theses, so decide the
-answer before launch: document `listings` as the alternative, or support `minted`'s cache
-workflow. This will be asked on day one.
+| | Why |
+|---|---|
+| **No secrets in the container's environment** | A document reads `/proc/self/environ` and the values land in the log we return |
+| **`docker kill` by container name** | Killing the client does not stop the container |
+| **Size cap on the writable output mount** | An uncapped mount took a 186 MB log |
+| **512 MB `/tmp`** | biber is par-packed Perl and fails to unpack in 64 MB |
+| **Writable, pre-seeded font cache** (41 MB) | Not a tmpfs — luaotfload rebuilds, costing 10× — and not read-only, which makes LuaLaTeX fail fatally |
+
+**Never pass `-shell-escape`**, which would turn restricted mode into unrestricted.
+
+**`openin_any=p` does not stop `\input`.** It governs `\openin` only, so arbitrary file read
+remains possible and **the container is the sole barrier against disclosure.**
 
 ---
 
