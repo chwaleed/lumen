@@ -14,6 +14,8 @@ choice from an accident — and knows what would have to change for the choice t
 | [0004](0004-feature-folders-for-tests.md) | Organise tests by feature, not by type | Accepted |
 | [0005](0005-screenshots-as-e2e-proof.md) | E2E tests capture named screenshots as proof | Accepted |
 | [0006](0006-report-missing-api-messages-as-null.md) | Report a missing API message as null | Accepted |
+| [0007](0007-append-only-full-content-snapshots.md) | Keep append-only full-content snapshots, defer compressing them | Accepted |
+| [0008](0008-latex-compiler-stack.md) | Compile with latexmk and pdfTeX on pinned TeX Live, isolated per compile | Accepted |
 
 ## Writing one
 
