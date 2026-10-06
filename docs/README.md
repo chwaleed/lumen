@@ -26,6 +26,8 @@ docs/
     feature-inventory.md       what the product does today, from the code
     requirements.md            the product, its users and the business model
     roadmap.md                 the order of work, and the risks that set it
+  plans/                       how a decided thing gets built
+    latex-compilation.md         Phase 1, milestone by milestone
   research/                    investigations that precede a decision
     latex-compiler-selection.md  which compiler to build Phase 1 on
     compiler-research-prompt.md  the same question, portable to other models
