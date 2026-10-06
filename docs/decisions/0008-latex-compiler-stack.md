@@ -1,6 +1,7 @@
 # ADR 0008: Compile with latexmk and pdfTeX on pinned TeX Live, isolated per compile
 
-**Status:** Accepted
+**Status:** Accepted — the shell-escape and compile-profile rows are revised by
+[ADR 0009](0009-use-restricted-shell-escape.md) and [ADR 0010](0010-one-compile-profile.md) after M0 measurement.
 
 ## Context
 

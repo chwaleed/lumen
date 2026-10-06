@@ -16,6 +16,8 @@ choice from an accident — and knows what would have to change for the choice t
 | [0006](0006-report-missing-api-messages-as-null.md) | Report a missing API message as null | Accepted |
 | [0007](0007-append-only-full-content-snapshots.md) | Keep append-only full-content snapshots, defer compressing them | Accepted |
 | [0008](0008-latex-compiler-stack.md) | Compile with latexmk and pdfTeX on pinned TeX Live, isolated per compile | Accepted |
+| [0009](0009-use-restricted-shell-escape.md) | Use restricted shell escape, not disabled | Accepted |
+| [0010](0010-one-compile-profile.md) | One compile profile, not two | Accepted |
 
 ## Writing one
 
