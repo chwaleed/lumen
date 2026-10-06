@@ -20,30 +20,192 @@ its own work.
 
 ---
 
-## M0 — Measure first
+## M0 — Measure first — **DONE (2026-10-06)**
 
-**Do not skip this.** ADR 0008 rests partly on unmeasured numbers, and the isolation choice
-in particular cannot be made from published figures — they are hello-world benchmarks or
-untraceable SEO content. One day of work here de-risks the whole phase.
+Measured on the dev machine: 12 cores, 23 GB RAM, `texlive/texlive:latest` (TeX Live 2026).
+**Caveat on every number: ~20 other containers were running** (Postgres, the Supabase stack),
+so these are shared-host figures, not clean dedicated-host ones. Treat them as a floor.
 
-- [ ] Pull the pinned image; record real pull time and on-disk size
-- [ ] Assemble a corpus: 3–5 real theses (60+ files, bibliography, TikZ), plus one small
-      article and one deliberately broken document
-- [ ] Time cold and warm builds, all three engines, full build vs `-draftmode` single pass
-- [ ] Time `docker run` create → run → teardown against the 4.5 GB image — this sets the
-      floor on agent iteration latency
-- [ ] Repeat the corpus under `runsc` (gVisor) vs `runc`. gVisor's known weak spot — ~11×
-      slower small-file reads — lands exactly on TeX's package loading, so measure it rather
-      than assuming
-- [ ] Find the concurrency knee: compiles in flight at 1, 2, 4× core count, watching p95
-- [ ] Confirm the engines are present, and **read `shell_escape_commands` out of the shipped
-      `texmf.cnf`** rather than trusting any published list
+Corpus: a generated 215-page thesis across **72 files** (10 chapters × 6 sections,
+`biblatex`+`biber` with 45 entries, TikZ, pgfplots, theorems, longtables, index), a small
+article, and 9 deliberately broken documents.
 
-**Record the results in this file.** They feed the fair-use values that
-[requirements.md §8](../product/requirements.md) still lists as open, and the capacity
-numbers in [ai-agent-vision.md §8](../product/ai-agent-vision.md).
+### Timings — 215-page thesis, 1 core, 1 GB, full hardening
 
----
+| Engine | Full build (`latexmk`, all passes) | Check profile (1 pass, `-draftmode`) |
+|---|---|---|
+| **pdfLaTeX** | **35.9 s** | **7.0 s** |
+| **XeLaTeX** | **36.0 s** | 7.5 s |
+| **LuaLaTeX** | 5.2–6.6 s/pass, needs a writable cache (below) | — |
+
+Small 2-page article, for comparison: pdfLaTeX 1.3 s full / 0.66 s check, XeLaTeX 1.7 s,
+LuaLaTeX 1.06 s.
+
+**The check profile is 5× faster than the full build.** That is ADR 0008's two-profile design
+justified by measurement rather than assumption.
+
+**XeLaTeX is not slower than pdfLaTeX on a real document** — 36.0 s vs 35.9 s. The widely
+repeated "pdfLaTeX is 2× faster" claim measures engine *startup* on a hello-world, which is
+noise at thesis scale. pdfTeX remains the right default for compatibility and for LLM
+training distribution, but **not on speed grounds** at this document size.
+
+Warm-rebuild numbers are **not reported**: latexmk keys off its `.fdb_latexmk` database, not
+mtimes, so `touch` does not force a rebuild and the figures were measuring a no-op.
+
+### Container overhead and image
+
+| | |
+|---|---|
+| `docker run` create → run → teardown | **261 ms** median (12 runs, min 235, max 292) |
+| Image size | **8.41 GB uncompressed** (2.56 GB compressed). The TeX tree is 4.8 GB |
+| Cold pull | **35 min 1 s** at 1.25 MB/s |
+| Hardened `lumen-tex` image on top | **+30 MB** |
+
+261 ms is the floor under every compile, so a 20-iteration agent task pays ~5 s in container
+churn alone. It does not justify warm pools on its own — 261 ms against a 7 s check compile
+is under 4%.
+
+**The 35-minute cold pull does matter for autoscaling**: a new worker is unavailable for
+tens of minutes unless the image is pre-baked into the machine image or served from a local
+registry mirror.
+
+### Concurrency knee
+
+Check-profile compiles of the 215-page thesis, each capped at 1 core, on 12 shared cores:
+
+| Concurrent | Median job | Max job | Throughput |
+|---|---|---|---|
+| 1 | 8.9 s | 8.9 s | 6.7 /min |
+| 2 | 7.9 s | 7.9 s | 15.2 /min |
+| **4** | **9.2 s** | 9.4 s | **25.5 /min** |
+| 8 | 14.6 s | 15.1 s | 31.9 /min |
+| 12 | 19.5 s | 20.3 s | 35.4 /min |
+
+**The knee is at ~4 concurrent compiles on 12 cores.** Past it, latency degrades faster than
+throughput improves: 8 concurrent costs 1.6× the latency for 25% more throughput, 12
+concurrent costs 2.2× for 11%.
+
+**Budget roughly one compile per 3 cores, not one per core.** `--cpus=1` does not make a
+compile one core's worth of load — memory bandwidth and I/O contend. This revises the
+capacity arithmetic upward by about 3×, and it is the number to re-measure on a dedicated
+host before sizing anything.
+
+> **Business consequence, stated plainly.** A thesis full build is ~36 s of CPU. Unlimited
+> free compilation of thesis-sized documents is therefore materially more expensive than the
+> earlier sizing assumed, and this is very likely why Overleaf's free tier stops at a 10 s
+> timeout — **our corpus cannot be compiled on Overleaf free at all.** The model still works,
+> but it depends on the check profile, on caching, and on fair-use concurrency limits
+> mattering more than expected. Feed this into
+> [requirements.md §6](../product/requirements.md).
+
+### Security findings — all three are real and reproducible
+
+**1. Environment variables leak into the compile log.** A document containing
+`\input{/proc/self/environ}` put a canary secret straight into `main.log`, which we return
+to users.
+
+> **Requirement:** the compile container must never receive secrets as environment
+> variables. No `S3` keys, no `DATABASE_URL`, no `JWT_SECRET_KEY`. This is not a hardening
+> nicety — it is a disclosure bug waiting to be written.
+
+**2. `openin_any = p` does not stop `\input`.** Set it, verify it with `kpsewhich`, and
+`\input{/etc/passwd}` still typesets the file into the PDF. Measured on the hardened image:
+
+| Attack | Result |
+|---|---|
+| `\input{/etc/passwd}` (absolute) | **LEAKED** |
+| `\input{../../../../etc/passwd}` (traversal) | **LEAKED** |
+| `\openin` of `/etc/passwd` | blocked |
+
+`openin_any` governs `\openin` only. **The container is the only barrier against file
+disclosure**, which makes the sandbox load-bearing rather than defence-in-depth, and makes
+"what is readable inside the image" a security boundary.
+
+**3. Killing `docker run` does not kill the container.** A host-side timeout killed the
+client while the container kept running and wrote a **186 MB log file** into the project
+directory. Two requirements fall out:
+
+- The supervisor must `docker kill` **by container name**. Killing the client is not a
+  timeout. (Verified working: a 20 s deadline now terminates the container.)
+- **The output directory needs its own size cap.** The tmpfs caps protected `/tmp` and
+  `HOME`; the writable project mount was uncapped, which is where the 186 MB went.
+
+### The font-cache trap — worth 10× on Xe/Lua
+
+LuaLaTeX took **11.2 s on a two-page article**. Cause: luaotfload's cache root is
+`$HOME/.texlive2026/...`, and `HOME` is a fresh tmpfs each run, so it rebuilt the font
+database on every compile and ignored the cache baked into the image.
+
+| Configuration | LuaLaTeX, 2-page article |
+|---|---|
+| `HOME` on throwaway tmpfs (naive) | 11,183 ms |
+| `TEXMFCACHE` → image's baked cache | **1,055 ms** — 10.6× faster |
+
+XeLaTeX showed the same effect: 5.4 s → 1.7 s once caches were baked into the image.
+
+**But a read-only cache is not enough.** With `TEXMFCACHE` pointing at the read-only image
+path, LuaLaTeX **fatally fails** on the real thesis inside `luaotfload-init` when it needs to
+write an entry. The working configuration is a **writable cache, pre-seeded from the image**
+(41 MB), which produced a PDF in 5.2–6.6 s per pass.
+
+> **Design consequence.** The compile container needs a writable, persistent, pre-seeded font
+> cache — not a tmpfs, and not a read-only mount. Keyed per worker is acceptable *while only
+> system fonts are involved*, because the cache is derived from image content. **The moment
+> users can upload fonts it becomes tenant data and must be keyed per project.** Decide this
+> before M6 allows font uploads.
+
+### Shell-escape allowlist — the published lists are wrong
+
+Read out of the shipped `texmf.cnf` (TeX Live 2026), 13 entries, not the 8 published:
+
+```
+bibtex, bibtex8, extractbb, gregorio, kpsewhich, l3sys-query, latexminted,
+makeindex, memoize-extract.pl, memoize-extract.py, repstopdf, r-mpost,
+texosquery-jre8
+```
+
+**`latexminted` is on the allowlist**, which means `minted` may work under *restricted*
+shell escape (`shell_escape = p`) without `-shell-escape`. That materially weakens ADR 0008's
+`shell_escape = f`, and **re-opens the minted question**: restricted mode is a curated
+allowlist vetted by the TeX Live security team, not blocklist whack-a-mole. The counterweight
+is `texosquery-jre8`, which exists to expose OS information to documents. **Open decision.**
+
+Defaults as shipped, confirmed: `shell_escape = p`, **`openin_any = a`**, `openout_any = p`.
+
+### Snap Docker is unusable for this — three independent failures
+
+Docker here is Snap-installed (`/snap/bin/docker`, v29.8.0):
+
+| Failure | Effect |
+|---|---|
+| `/tmp` bind-mounts **silently mount empty** | Snap has a private `/tmp`; the container sees nothing |
+| `--security-opt=no-new-privileges` **breaks exec** | Reproduced on `alpine` too, so it is the host, not the image |
+| Redirecting Docker's stdout to a file **makes the run fail** | 0 bytes written, non-zero exit. Pipes work; redirects do not |
+
+**Production must use Docker CE or Podman.** Overleaf documents the same Snap incompatibility
+for its own sandboxed compiles. For local development, keep the compile workspace under
+`$HOME`, never `/tmp`.
+
+### Engines confirmed present
+
+pdfTeX 1.40.29, XeTeX 0.999998, LuaHBTeX 1.24.0, `latexmk` 4.88 (9 Mar 2026), biber 2.22,
+bibtex, makeindex — all TeX Live 2026. **`pdfinfo` is absent**, so take page counts from the
+engine's own `Output written on ... (N pages` log line.
+
+**biber needs a large writable temp.** It is par-packed Perl that unpacks itself at runtime
+and fails with "No space left on device" on a 64 MB tmpfs. **512 MB `/tmp` works.** A silent
+bibliography failure is exactly the kind of bug that reaches a user as "my citations are
+`[?]`".
+
+### Still open
+
+- [ ] **gVisor comparison not run** — `runsc` is not installed and installing it needs root.
+      This is the measurement that decides whether strong isolation is affordable, and
+      ADR 0008's "gVisor before public launch" stays unverified until it runs.
+- [ ] Re-measure the concurrency knee on a **dedicated** host; these figures share a box with
+      ~20 containers.
+- [ ] Measure with **real** theses rather than a generated corpus. The generated one is
+      structurally realistic but its content is `lipsum`.
 
 ## M1 — Compile by hand, no application
 
