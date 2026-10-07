@@ -10,10 +10,14 @@ from src.compiles.service import (
     MaterialiseError,
     claim_next_job,
     create_job,
+    ensure_project_fits,
     materialise_project,
+    project_size_bytes,
     project_source_paths,
+    queue_stats,
     reap_stale_jobs,
     resolve_root_tex,
+    running_jobs_per_user,
 )
 from src.core.config import Settings
 from src.core.security import utc_now
@@ -221,3 +225,139 @@ class TestQueue:
         assert reap_stale_jobs(compile_session, timeout_seconds=300) == 0
         compile_session.refresh(job)
         assert job.status == STATUS_RUNNING
+
+
+def _project_for(session: Session, user: User, name: str = "P") -> Project:
+    project = Project(name=name, user_id=user.id, engine="pdflatex")
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return project
+
+
+def _user(session: Session, email: str) -> User:
+    user = User(email=email, password_hash="x", name="U")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+class TestPerUserConcurrency:
+    def test_a_user_at_their_limit_is_skipped_for_someone_waiting(
+        self, compile_session: Session
+    ) -> None:
+        # Fair use, not a paywall: one account must not starve the fleet.
+        settings = Settings(database_url="sqlite:///:memory:", compile_max_concurrent_per_user=1)
+        greedy = _user(compile_session, "greedy@example.com")
+        polite = _user(compile_session, "polite@example.com")
+        greedy_project = _project_for(compile_session, greedy, "greedy")
+        polite_project = _project_for(compile_session, polite, "polite")
+
+        first = create_job(compile_session, greedy_project)
+        second = create_job(compile_session, greedy_project)
+        third = create_job(compile_session, polite_project)
+
+        claimed_first = claim_next_job(compile_session, settings)
+        assert claimed_first.id == first.id
+
+        # The greedy user's second job is older than the polite user's, but they
+        # are already at their limit, so the polite one runs.
+        claimed_second = claim_next_job(compile_session, settings)
+        assert claimed_second.id == third.id
+        assert second.id not in {claimed_first.id, claimed_second.id}
+
+    def test_nothing_is_claimed_when_every_owner_is_at_their_limit(
+        self, compile_session: Session
+    ) -> None:
+        settings = Settings(database_url="sqlite:///:memory:", compile_max_concurrent_per_user=1)
+        user = _user(compile_session, "solo@example.com")
+        project = _project_for(compile_session, user)
+        create_job(compile_session, project)
+        create_job(compile_session, project)
+
+        assert claim_next_job(compile_session, settings) is not None
+        # Queued, not starved: the next tick will pick it up.
+        assert claim_next_job(compile_session, settings) is None
+
+    def test_running_jobs_are_counted_per_user(self, compile_session: Session) -> None:
+        settings = Settings(database_url="sqlite:///:memory:", compile_max_concurrent_per_user=5)
+        user = _user(compile_session, "counted@example.com")
+        project = _project_for(compile_session, user)
+        create_job(compile_session, project)
+        create_job(compile_session, project)
+        claim_next_job(compile_session, settings)
+        claim_next_job(compile_session, settings)
+
+        assert running_jobs_per_user(compile_session) == {user.id: 2}
+
+
+class TestProjectSize:
+    def test_counts_uploaded_bytes_and_live_text(self, compile_session: Session) -> None:
+        project = _project(compile_session)
+        _file(compile_session, project, "main.tex", "x" * 100)
+        upload = FileEntry(
+            project_id=project.id,
+            parent_id=None,
+            name="figure.png",
+            type="file",
+            file_url="https://example.com/figure.png",
+            size_bytes=500,
+        )
+        compile_session.add(upload)
+        compile_session.commit()
+
+        assert project_size_bytes(compile_session, project.id) == 600
+
+    def test_only_the_newest_snapshot_of_a_file_counts(self, compile_session: Session) -> None:
+        # The history is append-only and never written to disk, so counting it
+        # would reject projects that are not actually large.
+        project = _project(compile_session)
+        entry = _file(compile_session, project, "main.tex", "x" * 10)
+        compile_session.add(FileSnapshot(file_id=entry.id, content="y" * 40, version=2))
+        compile_session.commit()
+
+        assert project_size_bytes(compile_session, project.id) == 40
+
+    def test_submit_is_refused_when_the_project_is_too_large(
+        self, compile_session: Session
+    ) -> None:
+        from fastapi import HTTPException
+
+        project = _project(compile_session)
+        _file(compile_session, project, "main.tex", "x" * 5000)
+        settings = Settings(database_url="sqlite:///:memory:", compile_max_project_bytes=1000)
+
+        with pytest.raises(HTTPException) as error:
+            ensure_project_fits(compile_session, project.id, settings)
+
+        assert error.value.status_code == 413
+
+    def test_a_normal_project_passes(self, compile_session: Session) -> None:
+        project = _project(compile_session)
+        _file(compile_session, project, "main.tex", "a thesis chapter")
+        ensure_project_fits(
+            compile_session, project.id, Settings(database_url="sqlite:///:memory:")
+        )
+
+
+class TestQueueStats:
+    def test_reports_depth_and_running(self, compile_session: Session) -> None:
+        settings = Settings(database_url="sqlite:///:memory:")
+        project = _project(compile_session)
+        create_job(compile_session, project)
+        create_job(compile_session, project)
+        claim_next_job(compile_session, settings)
+
+        stats = queue_stats(compile_session)
+
+        assert stats["queued"] == 1
+        assert stats["running"] == 1
+        assert stats["oldest_wait_seconds"] is not None
+
+    def test_an_empty_queue_reports_no_wait(self, compile_session: Session) -> None:
+        stats = queue_stats(compile_session)
+
+        assert stats["queued"] == 0
+        assert stats["oldest_wait_seconds"] is None
+        assert stats["median_duration_ms"] is None

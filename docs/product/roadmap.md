@@ -18,9 +18,13 @@ which is the entire reason this product is feasible. Nothing else may go first.
 
 ---
 
-## Phase 1 — Compile
+## ✅ Phase 1 — Compile — **DONE (2026-10-08)**
 
 **Goal: press a button, get a PDF.** No AI in this phase at all.
+
+Built across eight milestones; see [../plans/latex-compilation.md](../plans/latex-compilation.md)
+for what each one found and decided. Outstanding before it is shippable: an end-to-end run
+through a browser, source ↔ output sync, and engine support beyond pdfLaTeX.
 
 | | Work |
 |---|---|
@@ -36,8 +40,8 @@ which is the entire reason this product is feasible. Nothing else may go first.
 **Done when:** a user uploads a real multi-file thesis and compiles it to a correct PDF,
 and a broken document produces an error they can click.
 
-**Also fix here:** remove the "Auto-compile On" badge until it is true, and raise the
-database connection pool from its default of 15 before any load arrives.
+**Also fixed here:** the "Auto-compile On" badge is gone — it labelled a feature that did not
+exist — and the connection pool is raised from its default of 15 to 20 + 20.
 
 > This phase is systems engineering, not AI, and it is the largest single risk in the plan.
 > [ai-agent-vision.md §4](ai-agent-vision.md#4-what-is-actually-hard-ranked) explains why.

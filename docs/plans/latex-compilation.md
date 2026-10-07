@@ -31,7 +31,7 @@ its own work.
 | **M4** | PDF in the editor | ✅ **Done** — 2026-10-08 |
 | **M5** | Parsed errors and navigation | ✅ **Done** — 2026-10-08 |
 | **M6** | Non-image uploads | ✅ **Done** — 2026-10-08 |
-| **M7** | Fair use and operations | ⬜ **Next** — last one |
+| **M7** | Fair use and operations | ✅ **Done** — 2026-10-08 |
 
 Three M0 measurements remain genuinely open and are **deliberately not ticked**: the gVisor
 comparison (needs root and a non-Snap Docker host), a dedicated-host concurrency knee, and a
@@ -671,20 +671,68 @@ extension outside the allowlist".
 drift guard**: a frontend test reads `ALLOWED_EXTENSIONS` out of the Python source and asserts
 the TypeScript copy matches exactly, because two hand-maintained lists drift.
 
-## M7 — Fair use and operations
+## ✅ M7 — Fair use and operations — **DONE (2026-10-08)**
 
 Compilation is unlimited on every plan, so these protect the shared fleet rather than push
-upgrades. A normal user must never meet them.
+upgrades. **A normal user should never meet them.**
 
-- [ ] Per-user concurrent compile limit; queue beyond it
-- [ ] Wall-clock timeout enforced by the supervisor, not only the engine
-- [ ] Reject oversized projects at submit, not at compile
-- [ ] Queue depth, wait time and compiles/second exposed as metrics. **Queue depth backing up
-      is the signal to scale** — a far better signal than a user count
-- [ ] Cancel a running job and reap its container
-- [ ] Alert on snapshot table growth, per [ADR 0007](../decisions/0007-append-only-full-content-snapshots.md)
+| Control | Default | Setting |
+|---|---|---|
+| Concurrent compiles per user | 2 | `COMPILE_MAX_CONCURRENT_PER_USER` |
+| Project size at submit | 200 MB | `COMPILE_MAX_PROJECT_BYTES` |
+| Wall-clock per compile | 300 s | `COMPILE_TIMEOUT_SECONDS` |
 
----
+### Per-user concurrency queues rather than rejects
+
+A user at their limit has their *next* job skipped, not failed — the queue moves on to
+someone waiting and comes back on the following tick. One account cannot starve the fleet,
+and nobody loses work for being busy.
+
+Applied in two steps rather than one clever join: Postgres refuses `FOR UPDATE` against the
+nullable side of an outer join, and that path could not be covered by a suite that runs on
+SQLite. Candidates are read, filtered in Python, and only the chosen row is locked.
+
+### Oversized projects are rejected at submit
+
+`ensure_project_fits` counts uploaded bytes plus the **newest** snapshot of each file. The
+snapshot history is append-only and never written to disk, so counting it would reject
+projects that are not actually large.
+
+### A running compile can now be cancelled
+
+M3 returned 409 here and said why: only the worker process knew the container name. The row
+now carries it, so the API kills the container by name.
+
+**Verified for real** — a looping compile was started, `docker kill` issued through the
+cancel path, and the container was gone two seconds later with `compile.sh` exiting 124.
+
+That kill makes the compile fail, which would have overwritten the cancellation with a
+failure. `_finish` now refuses to change a status that is already terminal, so the row keeps
+saying `cancelled` while still recording the exit code and duration. The kill is **best
+effort**: in a split deployment where the API has no Docker socket it will not land, the row
+still reads cancelled, and `compile.sh`'s deadline remains the backstop.
+
+### Metrics
+
+`GET /ops/compile-queue` returns queue depth, the oldest wait, completions and failures in
+the last minute, median duration, and snapshot volume.
+
+- **Queue depth backing up is the signal to add workers** — a far better signal than a user
+  count, per [ai-agent-vision.md §8](../product/ai-agent-vision.md).
+- **Snapshot volume** is the number [ADR 0007](../decisions/0007-append-only-full-content-snapshots.md)
+  defers acting on until it matters. Exposing it is the honest version of "alert on snapshot
+  growth": there is no alerting infrastructure to hook into yet, so the number is published
+  for whatever eventually watches it.
+
+It sits behind authentication because nothing scrapes it. A real collector wants an
+unauthenticated or token-authenticated endpoint, which is a deployment decision rather than
+something to guess at now.
+
+### Tests
+
+**Backend 188 (+1 `texlive`), frontend 156 — all passing.** The M3 test asserting 409 on a
+running job was rewritten rather than deleted: cancelling one is now the expected behaviour,
+and a *finished* job is what returns 409.
 
 ## One compile profile
 

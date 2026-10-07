@@ -15,10 +15,13 @@ from src.compiles.schemas import (
     CompileLogResponse,
 )
 from src.compiles.service import (
-    cancel_queued_job,
+    cancel_job,
     create_job,
+    ensure_project_fits,
     get_job_for_project,
     output_path,
+    queue_stats,
+    snapshot_storage_stats,
 )
 from src.core.api_response import ApiResponse, ApiResponseBuilder
 from src.core.config import Settings, get_settings
@@ -61,6 +64,7 @@ def post_compile(
     project_id: int,
     current_user: CurrentUser,
     session: DbSession,
+    settings: AppSettings,
     root_file_id: int | None = None,
 ) -> ApiResponse:
     """Queue a compile. 202, never a result: a build holds a core for seconds."""
@@ -74,6 +78,10 @@ def post_compile(
             raise projects_exception(
                 "The compile root must be a file.", status.HTTP_400_BAD_REQUEST
             )
+
+    # Rejected here rather than after a worker has already fetched the project
+    # and filled a disk with it.
+    ensure_project_fits(session, project.id, settings)
 
     job = create_job(session, project, root_file_id=root_file_id)
     return ApiResponseBuilder.success(data=_serialize(job), message="Compile queued.")
@@ -168,5 +176,26 @@ def delete_compile(
 ) -> ApiResponse:
     project = get_project_for_user(session, current_user, project_id)
     job = get_job_for_project(session, project, job_id)
-    job = cancel_queued_job(session, job)
+    job = cancel_job(session, job)
     return ApiResponseBuilder.success(data=_serialize(job), message="Compile cancelled.")
+
+
+# Operational metrics. Not project-scoped, so a separate router.
+#
+# Behind authentication because nothing scrapes it yet. A real metrics collector
+# wants an unauthenticated or token-authenticated endpoint; that is a deployment
+# decision rather than something to guess at now.
+ops_router = APIRouter(prefix="/ops", tags=["ops"])
+
+
+@ops_router.get("/compile-queue", response_model=ApiResponse)
+def get_compile_queue(current_user: CurrentUser, session: DbSession) -> ApiResponse:
+    """Queue depth, oldest wait, recent throughput, and snapshot volume.
+
+    Queue depth backing up is the signal to add compile workers. Snapshot volume
+    is the number ADR 0007 defers acting on until it matters.
+    """
+    return ApiResponseBuilder.success(
+        data={**queue_stats(session), **snapshot_storage_stats(session)},
+        message="Compile queue status.",
+    )

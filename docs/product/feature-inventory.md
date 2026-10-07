@@ -18,16 +18,16 @@ the agent stands on.
 
 | Status | Feature | Notes |
 |---|---|---|
-| 🟡 | Compile a project to PDF | Buttons exist with no handlers; preview shows raw source beneath an "Auto-compile On" badge |
-| ⬜ | Sandboxed compile service | TeX Live container, no shell-escape, CPU/memory/time caps |
-| ⬜ | Multi-pass builds | `latexmk` for bibliography and cross-reference passes |
-| ⬜ | PDF viewer | Page navigation, zoom, source ↔ output sync |
-| ⬜ | Parsed error log | File, line, message — deduplicated, real error first |
-| ⬜ | Error navigation | Click an error, land on the line |
-| ⬜ | Warning surface | Overfull boxes, undefined references, missing citations |
-| ⬜ | Build queue | Jobs, not inline requests; observable depth and wait time |
-| ⬜ | Fair-use protection | Per-user concurrency, build timeout, project size ceiling |
-| ⬜ | Engine selection | pdfLaTeX, XeLaTeX, LuaLaTeX |
+| ✅ | Compile a project to PDF | Queued job, PDF in the preview panel |
+| ✅ | Sandboxed compile service | Pinned TeX Live by digest, restricted shell escape, CPU/memory/PID/wall-clock caps, `--network=none` |
+| ✅ | Multi-pass builds | `latexmk` decides the passes and runs biber/bibtex |
+| 🟡 | PDF viewer | The browser's own viewer: page navigation, zoom, search, print. **No source ↔ output sync** — SyncTeX is produced but not consumed |
+| ✅ | Parsed error log | File, line, message. Follow-ons suppressed, real error first |
+| ✅ | Error navigation | Click an error, land on the line — including inside an `\input`-ed subfile |
+| ✅ | Warning surface | Undefined references and citations, overfull boxes — listed apart from errors |
+| ✅ | Build queue | Postgres `SKIP LOCKED`; depth and wait at `GET /ops/compile-queue` |
+| ✅ | Fair-use protection | Per-user concurrency (queues, never rejects), build timeout, project size ceiling at submit |
+| 🟡 | Engine selection | All three wired and stored per project; **only pdfLaTeX is tested and supported** |
 
 ## Primary feature 2 — Agentic AI
 
@@ -110,7 +110,7 @@ First-party only. No third-party sellers.
 |---|---|---|
 | ✅ | Image upload to S3 | Presigned PUT; bytes never pass through the API |
 | ✅ | Type and filename safety | Images only; directory components stripped |
-| ⬜ | Non-image assets | `.bib`, `.cls`, `.sty` cannot be uploaded — needed for real projects |
+| ✅ | Non-image assets | `.bib`, `.cls`, `.sty`, `.bst` and figures, on an extension allowlist with S3-enforced size limits |
 
 ### Billing
 
@@ -128,7 +128,7 @@ First-party only. No third-party sellers.
 | Status | Feature | Notes |
 |---|---|---|
 | ✅ | Automatic migrations at startup | Cannot serve a stale schema. Races if instances scale out |
-| ✅ | 243 automated tests | 98 backend, 121 frontend unit, 24 e2e |
+| ✅ | 368 automated tests | 188 backend (+1 opt-in `texlive`), 156 frontend unit, 24 e2e |
 | ✅ | Sentry error reporting | Optional |
 | ⬜ | CI | Nothing runs the tests automatically |
 | ⬜ | Secure cookies | Deliberately disabled until TLS exists |
@@ -141,12 +141,16 @@ First-party only. No third-party sellers.
 ```
 Platform (accounts, projects, files, editing)   ████████████████████  built
 Templates — basic                               ████████░░░░░░░░░░░░  seeding works, no catalogue
-Compilation                                     ░░░░░░░░░░░░░░░░░░░░  not started
+Compilation                                     ██████████████████░░  built, no browser e2e
 Agentic AI                                      █░░░░░░░░░░░░░░░░░░░  UI shell only
 Billing                                         ░░░░░░░░░░░░░░░░░░░░  not started
 ```
 
-The editor is real and well tested. **Neither primary feature exists yet** — and the second
-cannot start until the first works, because an agent with no compiler is a chatbot. See
-[roadmap.md](roadmap.md) for the order, and
-[ai-agent-vision.md](ai-agent-vision.md) for why compilation is the hard part.
+**The first primary feature now exists.** A project compiles to a PDF, errors are parsed and
+clickable, and the queue is observable — see
+[../plans/latex-compilation.md](../plans/latex-compilation.md). What remains before calling it
+shippable is an end-to-end run through a browser, source ↔ output sync, and engine support
+beyond pdfLaTeX.
+
+**The agent has not started**, and it is now unblocked: the compiler it needs to check its own
+work is in place. See [roadmap.md](roadmap.md) for what comes next.

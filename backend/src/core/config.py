@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     compile_cpus: str = Field(default="1", alias="COMPILE_CPUS")
     compile_memory: str = Field(default="1g", alias="COMPILE_MEMORY")
     compile_poll_seconds: float = Field(default=2.0, alias="COMPILE_POLL_SECONDS")
+    # Fair use, not a paywall: compilation is unlimited on every plan, and
+    # these exist so one account cannot starve the shared fleet. A normal
+    # user should never meet them. See docs/product/requirements.md.
+    compile_max_concurrent_per_user: int = Field(
+        default=2, alias="COMPILE_MAX_CONCURRENT_PER_USER"
+    )
+    compile_max_project_bytes: int = Field(
+        default=200 * 1024 * 1024, alias="COMPILE_MAX_PROJECT_BYTES"
+    )
     # no-new-privileges is required in production but breaks exec on Snap-installed
     # Docker, which cannot run this service anyway. Set empty only for local work
     # on such a host. See docs/plans/latex-compilation.md (M0).

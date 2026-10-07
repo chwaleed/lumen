@@ -15,7 +15,7 @@ set -uo pipefail
 
 IMAGE="${LUMEN_TEX_IMAGE:-lumen-tex:latest}"
 WORK="" ROOT="main.tex" ENGINE="pdflatex"
-DEADLINE=300 CPUS=1 MEM=1g CACHE="" HALT=0
+DEADLINE=300 CPUS=1 MEM=1g CACHE="" HALT=0 NAME=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -27,6 +27,9 @@ while [ $# -gt 0 ]; do
     --mem)      MEM="$2"; shift 2 ;;
     --cache)    CACHE="$2"; shift 2 ;;
     --halt-on-error) HALT=1; shift ;;   # agent wants the first error only
+    # The supervisor supplies a name so it can kill this container later: a
+    # running compile cannot be cancelled if only the child knows its name.
+    --name)     NAME="$2"; shift 2 ;;
     *) echo "compile.sh: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -71,7 +74,7 @@ fi
 SECOPT="${LUMEN_SECOPT---security-opt=no-new-privileges}"
 SECOPT_ARGS=(); [ -n "$SECOPT" ] && SECOPT_ARGS=("$SECOPT")
 
-NAME="lumen-compile-$$-${RANDOM}"
+[ -n "$NAME" ] || NAME="lumen-compile-$$-${RANDOM}"
 
 # Host-side wall-clock kill, BY CONTAINER NAME. Killing the `docker run` client
 # does NOT stop the container: one left running wrote a 186 MB log before it was

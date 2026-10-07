@@ -67,9 +67,9 @@ If they need it before changing a design, it belongs here.
 |---|---|
 | SRS, SDD, ADRs | Written and current — SRS covers the complete product, built and unbuilt |
 | Product requirements, roadmap | Defined. Prices and dates remain open |
-| Testing strategy | Current — 243 tests |
+| Testing strategy | Current — 188 backend (+1 opt-in `texlive`), 156 frontend unit, 24 e2e |
 | Operations | Written; describes a deployment that does not exist yet |
-| **LaTeX compilation** (primary) | **Not started.** The preview shows source beneath an "Auto-compile On" label |
+| **LaTeX compilation** (primary) | **Built.** Phase 1 complete — see [plans/latex-compilation.md](plans/latex-compilation.md). Not yet driven through a browser end to end |
 | **Agentic AI** (primary) | **UI shell only.** Nothing answers a prompt |
 | Billing | **Not started** |
 | CI | **None.** Deploy workflow commented out; nothing runs the tests |

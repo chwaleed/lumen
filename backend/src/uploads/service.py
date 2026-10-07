@@ -83,7 +83,7 @@ def _check_size(
         limit_mb = settings.upload_max_file_bytes // (1024 * 1024)
         raise projects_exception(
             f"This file is larger than the {limit_mb} MB limit for a single upload.",
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
         )
 
     used = project_bytes_used(session, project_id)
@@ -91,7 +91,7 @@ def _check_size(
         limit_mb = settings.project_max_bytes // (1024 * 1024)
         raise projects_exception(
             f"This upload would take the project past its {limit_mb} MB limit.",
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
         )
 
 

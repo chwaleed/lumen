@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from uuid import uuid4
 
 from sqlmodel import Session
 
@@ -14,6 +15,7 @@ from src.compiles.models import (
     STATUS_FAILURE,
     STATUS_SUCCESS,
     STATUS_TIMEOUT,
+    TERMINAL_STATUSES,
     CompileJob,
 )
 from src.compiles.service import (
@@ -74,9 +76,15 @@ def run_job(session: Session, job: CompileJob, settings: Settings | None = None)
         )
 
     cache_dir = Path(settings.compile_cache_dir)
+    container_name = f"lumen-compile-{job.id}-{uuid4().hex[:8]}"
+    job.container_name = container_name
+    session.add(job)
+    session.commit()
+
     result = subprocess.run(  # noqa: S603 - fixed argv, no shell
         [
             settings.compile_script,
+            "--name", container_name,
             "--work", str(work_dir),
             "--root", root_tex,
             "--engine", job.engine,
@@ -152,7 +160,11 @@ def _finish(
     log: str | None = None,
     synctex: str | None = None,
 ) -> CompileJob:
-    job.status = status
+    # A cancellation landed while this compile was running: keep it. Overwriting
+    # it with the failure its own kill produced would report something untrue.
+    session.refresh(job)
+    if job.status not in TERMINAL_STATUSES:
+        job.status = status
     job.exit_code = exit_code
     job.duration_ms = duration_ms
     job.error_count = error_count
@@ -170,7 +182,7 @@ def run_once(settings: Settings | None = None) -> CompileJob | None:
     """Claim and run a single job. Returns None when the queue is empty."""
     settings = settings or get_settings()
     with Session(get_engine(settings)) as session:
-        job = claim_next_job(session)
+        job = claim_next_job(session, settings)
         if job is None:
             return None
         return run_job(session, job, settings)

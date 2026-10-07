@@ -80,6 +80,12 @@ class CompileJob(SQLModel, table=True):
     log_path: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
     synctex_path: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
 
+    # The container running this job, so the API can kill it. Without this only
+    # the worker process knows the name and a running compile is uncancellable.
+    container_name: str | None = Field(
+        default=None, sa_column=Column(String(128), nullable=True)
+    )
+
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),

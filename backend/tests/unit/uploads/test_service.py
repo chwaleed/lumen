@@ -222,7 +222,7 @@ def test_rejects_a_file_over_the_single_upload_limit(
     with pytest.raises(HTTPException) as error:
         create_presigned_upload(session, owner, settings, request_for(project, size_bytes=oversized))
 
-    assert error.value.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    assert error.value.status_code == status.HTTP_413_CONTENT_TOO_LARGE
 
 
 @mock_aws
@@ -245,7 +245,7 @@ def test_rejects_an_upload_that_would_pass_the_project_ceiling(
     with pytest.raises(HTTPException) as error:
         create_presigned_upload(session, owner, settings, request_for(project, size_bytes=1))
 
-    assert error.value.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    assert error.value.status_code == status.HTTP_413_CONTENT_TOO_LARGE
 
 
 @mock_aws

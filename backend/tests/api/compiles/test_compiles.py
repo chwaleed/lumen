@@ -229,10 +229,9 @@ class TestCancelCompile:
         assert response.status_code == 200, response.text
         assert response.json()["data"]["status"] == "cancelled"
 
-    def test_a_running_job_is_409_not_a_lie(self, api: TestClient) -> None:
-        # Cancelling a running compile needs the container name on the row so the
-        # API can kill it -- that is M7. Until then say so, rather than marking the
-        # row cancelled and racing the worker's own write.
+    def test_a_running_job_can_now_be_cancelled(self, api: TestClient) -> None:
+        # M3 returned 409 here because only the worker knew the container name.
+        # M7 records it on the row, so the API can kill the container.
         h = _auth(api, "running@example.com")
         project_id = _new_project(api, h)
         job_id = _queue(api, h, project_id)
@@ -245,6 +244,28 @@ class TestCancelCompile:
         with Session(get_engine(get_settings())) as session:
             job = session.get(CompileJob, job_id)
             job.status = "running"
+            # No container name: the kill is skipped, the row still cancels.
+            session.add(job)
+            session.commit()
+
+        response = api.delete(f"/projects/{project_id}/compile/{job_id}", headers=h)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["status"] == "cancelled"
+
+    def test_an_already_finished_job_is_409(self, api: TestClient) -> None:
+        h = _auth(api, "finished@example.com")
+        project_id = _new_project(api, h)
+        job_id = _queue(api, h, project_id)
+
+        from sqlmodel import Session
+
+        from src.compiles.models import CompileJob
+        from src.db.session import get_engine
+
+        with Session(get_engine(get_settings())) as session:
+            job = session.get(CompileJob, job_id)
+            job.status = "success"
             session.add(job)
             session.commit()
 
@@ -258,3 +279,26 @@ class TestCancelCompile:
 
         assert api.delete(f"/projects/{project_id}/compile/{job_id}", headers=h).status_code == 200
         assert api.delete(f"/projects/{project_id}/compile/{job_id}", headers=h).status_code == 409
+
+
+class TestQueueMetrics:
+    def test_reports_depth_and_snapshot_volume(self, api: TestClient) -> None:
+        h = _auth(api, "ops@example.com")
+        project_id = _new_project(api, h)
+        _queue(api, h, project_id)
+        _queue(api, h, project_id)
+
+        response = api.get("/ops/compile-queue", headers=h)
+
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        assert data["queued"] == 2
+        assert data["running"] == 0
+        # Queue depth backing up is the signal to add workers.
+        assert data["oldest_wait_seconds"] is not None
+        # ADR 0007 defers compressing snapshots; this is the number to watch.
+        assert data["snapshot_count"] >= 1
+        assert data["snapshot_content_bytes"] > 0
+
+    def test_requires_authentication(self, api: TestClient) -> None:
+        assert api.get("/ops/compile-queue").status_code == 401
