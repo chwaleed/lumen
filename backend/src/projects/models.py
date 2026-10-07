@@ -15,6 +15,13 @@ class Project(SQLModel, table=True):
 
     name: str = Field(sa_column=Column(String(255), nullable=False))
 
+    # pdflatex is the default and the only engine supported in Phase 1; xelatex
+    # and lualatex are wired and selectable. See docs/decisions/0008-latex-compiler-stack.md.
+    engine: str = Field(
+        default="pdflatex",
+        sa_column=Column(String(20), nullable=False, server_default="pdflatex"),
+    )
+
     user_id: int = Field(
         sa_column=Column(
             Integer,

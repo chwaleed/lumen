@@ -13,6 +13,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from src.auth import models as _auth_models
+from src.compiles import models as _compile_models
 from src.core.config import Settings, get_settings
 from src.file_entries import models as _file_entry_models
 from src.file_snapshots import models as _file_snapshot_models

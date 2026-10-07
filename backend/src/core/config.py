@@ -51,6 +51,38 @@ class Settings(BaseSettings):
         default=900,
         alias="S3_PRESIGNED_URL_EXPIRES_SECONDS",
     )
+
+    # Compilation. The work directory is kept PER PROJECT, not per job: latexmk's
+    # .aux/.fdb_latexmk surviving between compiles is what makes a rebuild ~7s
+    # instead of ~36s. See docs/decisions/0010-one-compile-profile.md.
+    compile_script: str = Field(
+        default=str(REPO_ROOT / "compile" / "compile.sh"),
+        alias="COMPILE_SCRIPT",
+    )
+    tex_image: str = Field(default="lumen-tex:latest", alias="TEX_IMAGE")
+    compile_work_dir: str = Field(
+        default=str(BACKEND_DIR / ".compile" / "work"),
+        alias="COMPILE_WORK_DIR",
+    )
+    compile_output_dir: str = Field(
+        default=str(BACKEND_DIR / ".compile" / "output"),
+        alias="COMPILE_OUTPUT_DIR",
+    )
+    compile_cache_dir: str = Field(
+        default=str(BACKEND_DIR / ".compile" / "texcache"),
+        alias="COMPILE_CACHE_DIR",
+    )
+    compile_timeout_seconds: int = Field(default=300, alias="COMPILE_TIMEOUT_SECONDS")
+    compile_cpus: str = Field(default="1", alias="COMPILE_CPUS")
+    compile_memory: str = Field(default="1g", alias="COMPILE_MEMORY")
+    compile_poll_seconds: float = Field(default=2.0, alias="COMPILE_POLL_SECONDS")
+    # no-new-privileges is required in production but breaks exec on Snap-installed
+    # Docker, which cannot run this service anyway. Set empty only for local work
+    # on such a host. See docs/plans/latex-compilation.md (M0).
+    compile_security_opt: str = Field(
+        default="--security-opt=no-new-privileges",
+        alias="COMPILE_SECURITY_OPT",
+    )
     
 @lru_cache
 def get_settings() -> Settings:

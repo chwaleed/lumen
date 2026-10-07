@@ -299,40 +299,78 @@ nothing ran is worse than no check.**
 > drops `no-new-privileges`, which Snap breaks. Neither workaround is needed on Docker CE,
 > and production must not use Snap.
 
-## M2 — Compile service and worker, driven from a CLI
+## M2 — Compile service and worker, driven from a CLI — **DONE (2026-10-07)**
 
-No HTTP yet. The point is a working pipeline that can be exercised without the API.
+No HTTP. A job can be created, claimed, compiled and recorded end to end.
 
-- [ ] Add Redis to `docker-compose.yml`
-- [ ] Add **RQ** for the queue. Mature, synchronous, and matches a codebase whose handlers
-      are all sync `def`. Celery is heavier than this needs; `arq` assumes async
-- [ ] New backend package `src/compiles/` following the house layout — `models.py`,
-      `schemas.py`, `router.py`, `service.py`, with the router thin and the work in the
-      service
-- [ ] `service.py`: materialise a project's files from `file_entries` + latest
-      `file_snapshots` into a scratch directory
-- [ ] Supervisor process: pop a job, materialise files, `docker run --rm`, collect
-      `pdf` / `log` / `synctex.gz`, upload to S3, update the job row
-- [ ] Per-project cache directory for `.aux`/`.fls`, mounted per job. **Keyed per project —
-      a shared cache would be a cross-tenant channel**
-- [ ] A management command to submit a job and print the result
+```bash
+cd backend && python -m src.compiles.cli <project_id> [--engine pdflatex] [--root main.tex]
+```
 
-> **Known caveat.** The supervisor needs Docker access, which is effectively root on the
-> host. This is what Overleaf's CLSI does, and the supervisor is trusted code that never
-> executes user content — but prefer **rootless Docker or Podman** if it works on the target
-> host. Note that Overleaf documents sandboxed compiles as *not working* under Snap-installed
-> Docker, and the current dev machine has Snap Docker.
+| Module | What it does |
+|---|---|
+| `src/compiles/models.py` | `CompileJob`, statuses, engine list. Plus `projects.engine` |
+| `src/compiles/service.py` | Materialise a project to disk; create, claim and reap jobs |
+| `src/compiles/worker.py` | The supervisor: claim → materialise → `compile/compile.sh` → collect → record |
+| `src/compiles/cli.py` | Submit one job and run it inline — M2's acceptance check |
 
-**Done when** `python -m src.compiles.cli <project_id>` returns a PDF for a real project.
+`router.py` and `schemas.py` arrive with M3; empty files now would be boilerplate.
 
----
+### Verified end to end
+
+A seeded multi-file project (`main.tex` + `sections/intro.tex` + `sections/body.tex` +
+`refs.bib`, with `\input`, `\cite` and `\autoref`):
+
+| Run | Result |
+|---|---|
+| **Cold** | `success`, exit 0, **2,438 ms**, 0 errors, PDF + log + synctex written |
+| **Warm** (same project, second run) | `success`, **336 ms** — **7× faster** |
+| Bibliography | **0 undefined references or citations** — bibtex ran and resolved |
+
+The warm figure is the thing to watch: it comes from `main.aux`, `main.bbl` and
+`main.fdb_latexmk` surviving in the per-project work directory, which is exactly the
+dependency [ADR 0010](../decisions/0010-one-compile-profile.md) flagged as load-bearing.
+
+### Decisions taken here
+
+**The queue is Postgres, not Redis** — `SELECT ... FOR UPDATE SKIP LOCKED` against
+`compile_jobs`. This replaces the Redis/RQ sketch this plan originally carried; see
+[ADR 0011](../decisions/0011-postgres-as-the-compile-queue.md). `SKIP LOCKED` is applied only
+on Postgres, since the test suite runs on SQLite and is single-threaded.
+
+**The work directory is per project, not per job.** Reused across compiles so latexmk's
+artifacts survive. A `.lumen-manifest` records what was materialised, so a file deleted from
+the project is pruned on the next run while latexmk's own artifacts are left alone.
+
+**Outputs go to the local filesystem** (`COMPILE_OUTPUT_DIR`), with relative paths on the job
+row. Marked `ponytail:` in `models.py` — Phase 1 targets one machine, and moving to S3 is a
+change at one call site in `worker.py` once compile workers are split from the API.
+
+**Materialisation rejects unsafe names rather than sanitising them.** User-supplied names are
+written to disk, so `..`, `/`, `\` and empty names raise. A silently renamed file breaks
+`\input` in a way the user cannot see.
+
+### Found while building it
+
+- **The alembic head was `20260425_0001`, not the newest-looking file.** Branching off
+  `c8f6d85d350f` created two heads and migrations refused to run. Check
+  `down_revision` against the real head, not the filename order.
+- **The worker must inherit its own environment**, because `docker` lives in `/snap/bin` here
+  and a restricted `PATH` broke the first run. This does not widen what a document can read:
+  `compile.sh` passes only the `TEXMF*` variables into the container, which `verify.sh` checks.
+- `COMPILE_SECURITY_OPT` is a setting rather than an environment read, per CLAUDE.md. Set it
+  empty only on a Snap Docker host.
+
+### Tests
+
+25 new, in `backend/tests/unit/compiles/`. **Backend total 123, all passing.** None need
+Docker: path building, unsafe-name rejection, root-file resolution, manifest pruning,
+artifact survival, queue claiming, double-claim prevention, stale reaping, error counting.
 
 ## M3 — API
 
-- [ ] Migration: `projects.engine`, `String(16)`, not null, default `pdflatex`. Add it now
-      even though only one value is legal — ADR 0008 depends on this being a value rather
-      than a hardcode, and pdfTeX is frozen upstream so the default will likely move
-- [ ] Migration: `compile_jobs`
+**The schema and the queue already exist** — M2 added `projects.engine` and `compile_jobs`
+in `20261007_0001`. M3 only adds the HTTP surface. The columns, for reference:
 
 | Column | Type | Note |
 |---|---|---|
@@ -340,15 +378,14 @@ No HTTP yet. The point is a working pipeline that can be exercised without the A
 | `project_id` | FK → projects, cascade | |
 | `root_file_id` | FK → file_entries | usually `main.tex` |
 | `engine` | str | snapshot of the project value at submit time |
-| `profile` | str | `full` or `check` |
 | `status` | str | `queued`, `running`, `success`, `failure`, `timeout`, `cancelled` |
 | `exit_code` | int, null | |
 | `duration_ms` | int, null | |
 | `error_count` | int, null | |
-| `pdf_key`, `log_key`, `synctex_key` | str, null | S3 keys |
+| `pdf_path`, `log_path`, `synctex_path` | str, null | Relative to `COMPILE_OUTPUT_DIR` |
 | `created_at`, `started_at`, `finished_at` | timestamptz | |
 
-- [ ] Index `(project_id, created_at desc)` — the only read pattern that matters
+- [ ] *(done in M2)* Indexes on `(project_id, created_at)` and `(status, created_at)`
 - [ ] Endpoints, all ownership-scoped, returning **404 not 403** for another user's project
       per [ADR 0003](../decisions/0003-return-404-for-another-users-resource.md):
 

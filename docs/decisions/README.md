@@ -18,6 +18,7 @@ choice from an accident — and knows what would have to change for the choice t
 | [0008](0008-latex-compiler-stack.md) | Compile with latexmk and pdfTeX on pinned TeX Live, isolated per compile | Accepted |
 | [0009](0009-use-restricted-shell-escape.md) | Use restricted shell escape, not disabled | Accepted |
 | [0010](0010-one-compile-profile.md) | One compile profile, not two | Accepted |
+| [0011](0011-postgres-as-the-compile-queue.md) | Postgres is the compile queue, not Redis | Accepted |
 
 ## Writing one
 

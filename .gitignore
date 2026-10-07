@@ -1,1 +1,6 @@
 .env
+
+# Compile worker scratch, work and output directories
+backend/.compile/
+backend/*.db
+backend/.m2check.db
