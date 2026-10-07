@@ -51,19 +51,64 @@ describe("useCompileHook", () => {
     expect(state.durationMs).toBe(1418);
   });
 
-  it("loads the log when a compile fails", async () => {
+  it("loads the log and its parsed diagnostics when a compile fails", async () => {
     respondInOrderWithApi([
       { status: 202, success: true, data: job({ status: "queued" }) },
-      { status: 200, success: true, data: job({ status: "failure", error_count: 2 }) },
-      { status: 200, success: true, data: { log: "./main.tex:4: Missing $ inserted.", error_count: 2 } },
+      { status: 200, success: true, data: job({ status: "failure", error_count: 1 }) },
+      {
+        status: 200,
+        success: true,
+        data: {
+          log: "./main.tex:4: Missing $ inserted.",
+          error_count: 1,
+          errors: [
+            {
+              severity: "error",
+              message: "Missing $ inserted.",
+              file: "main.tex",
+              line: 4,
+            },
+          ],
+          warnings: [
+            {
+              severity: "warning",
+              message: "Reference `nope' undefined on input line 9.",
+              file: null,
+              line: 9,
+            },
+          ],
+        },
+      },
     ]);
 
     await useCompileHook.getState().compile("1");
 
     const state = useCompileHook.getState();
     expect(state.status).toBe("failure");
-    expect(state.errorCount).toBe(2);
+    expect(state.errorCount).toBe(1);
     expect(state.log).toContain("Missing $ inserted");
+    expect(state.errors).toHaveLength(1);
+    expect(state.errors[0].file).toBe("main.tex");
+    expect(state.errors[0].line).toBe(4);
+    expect(state.warnings).toHaveLength(1);
+  });
+
+  it("clears the previous compile's diagnostics when a new one starts", async () => {
+    useCompileHook.setState({
+      errors: [{ severity: "error", message: "stale", file: "old.tex", line: 1 }],
+      view: "problems",
+    });
+    respondInOrderWithApi([
+      { status: 202, success: true, data: job({ status: "queued" }) },
+      { status: 200, success: true, data: job({ status: "success", has_pdf: true }) },
+    ]);
+
+    await useCompileHook.getState().compile("1");
+
+    const state = useCompileHook.getState();
+    expect(state.errors).toEqual([]);
+    // The view follows the new compile rather than keeping the old pane.
+    expect(state.view).toBeNull();
   });
 
   it("does not fetch the log on success", async () => {

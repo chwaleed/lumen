@@ -22,10 +22,20 @@ class CompileJobResponse(BaseModel):
     finished_at: datetime | None
 
 
+class CompileDiagnostic(BaseModel):
+    severity: str
+    message: str
+    file: str | None
+    line: int | None
+
+
 class CompileLogResponse(BaseModel):
     job_id: int
     status: str
     error_count: int | None
-    # Raw engine output. The parsed (file, line, severity, message) list is M5;
-    # until then the client shows the log verbatim rather than a wrong guess.
+    # Ranked and deduplicated: the first error is the one that broke the build.
+    errors: list[CompileDiagnostic]
+    warnings: list[CompileDiagnostic]
+    # Kept alongside the parsed list, because a log always has more in it than
+    # any parser extracts.
     log: str

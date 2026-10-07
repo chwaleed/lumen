@@ -1,13 +1,19 @@
 "use client";
 
-import { FileText, Play, ScrollText, X } from "lucide-react";
+import { AlertCircle, FileText, Play, ScrollText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCompileHook } from "@/app/project/[id]/use-compile-hook";
+import {
+  useCompileHook,
+  type CompileDiagnostic,
+  type PreviewView,
+} from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
+import { CompileErrors } from "./compile-errors";
 import { CompileLog } from "./compile-log";
 import { CompileStatusBadge } from "./compile-status";
 import { PdfViewer } from "./pdf-viewer";
 import { PreviewEmptyState } from "./preview-empty-state";
+import { revealDiagnostic } from "./reveal-diagnostic";
 
 export function PreviewPanel() {
   const projectId = useProjectEditorHook((state) => state.projectId);
@@ -18,17 +24,28 @@ export function PreviewPanel() {
   const durationMs = useCompileHook((state) => state.durationMs);
   const hasPdf = useCompileHook((state) => state.hasPdf);
   const log = useCompileHook((state) => state.log);
-  const isLogOpen = useCompileHook((state) => state.isLogOpen);
+  const errors = useCompileHook((state) => state.errors);
+  const warnings = useCompileHook((state) => state.warnings);
+  const view = useCompileHook((state) => state.view);
   const compile = useCompileHook((state) => state.compile);
   const cancel = useCompileHook((state) => state.cancel);
-  const setLogOpen = useCompileHook((state) => state.setLogOpen);
+  const setView = useCompileHook((state) => state.setView);
 
   const isBusy = status === "queued" || status === "running";
-  const showLog = isLogOpen || (!hasPdf && log !== null);
+  const problemCount = errors.length + warnings.length;
   const pdfSrc =
     projectId && jobId !== null && hasPdf
       ? `/api/projects/${projectId}/compile/${jobId}/pdf`
       : null;
+
+  // With no explicit choice, follow the compile: the PDF when there is one,
+  // the problems when the build failed.
+  const activeView: PreviewView | null =
+    view ?? (pdfSrc ? "pdf" : problemCount > 0 ? "problems" : null);
+
+  const onSelect = (diagnostic: CompileDiagnostic) => {
+    revealDiagnostic(diagnostic);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -39,15 +56,37 @@ export function PreviewPanel() {
         </div>
 
         <div className="flex items-center gap-1">
-          {log !== null && (
+          {problemCount > 0 && (
             <Button
-              variant="ghost"
+              variant={activeView === "problems" ? "secondary" : "ghost"}
               size="sm"
               className="h-7 px-2 text-xs"
-              onClick={() => setLogOpen(!isLogOpen)}
+              onClick={() => setView("problems")}
             >
-              {isLogOpen ? <FileText data-icon="inline-start" /> : <ScrollText data-icon="inline-start" />}
-              {isLogOpen ? "PDF" : "Log"}
+              <AlertCircle data-icon="inline-start" />
+              {problemCount}
+            </Button>
+          )}
+          {pdfSrc && (
+            <Button
+              variant={activeView === "pdf" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setView("pdf")}
+            >
+              <FileText data-icon="inline-start" />
+              PDF
+            </Button>
+          )}
+          {log !== null && (
+            <Button
+              variant={activeView === "log" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setView("log")}
+            >
+              <ScrollText data-icon="inline-start" />
+              Log
             </Button>
           )}
 
@@ -76,9 +115,11 @@ export function PreviewPanel() {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {showLog && log !== null ? (
+        {activeView === "problems" ? (
+          <CompileErrors errors={errors} warnings={warnings} onSelect={onSelect} />
+        ) : activeView === "log" && log !== null ? (
           <CompileLog log={log} />
-        ) : pdfSrc ? (
+        ) : activeView === "pdf" && pdfSrc ? (
           <PdfViewer src={pdfSrc} title="Compiled PDF preview" />
         ) : (
           <PreviewEmptyState isBusy={isBusy} />

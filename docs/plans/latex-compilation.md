@@ -29,8 +29,8 @@ its own work.
 | **M2** | Compile service, worker and CLI | ✅ **Done** — 2026-10-07 |
 | **M3** | API | ✅ **Done** — 2026-10-07 |
 | **M4** | PDF in the editor | ✅ **Done** — 2026-10-08 |
-| **M5** | Parsed errors and navigation | ⬜ **Next** — prototyped in M0, not built |
-| **M6** | Non-image uploads | ⬜ |
+| **M5** | Parsed errors and navigation | ✅ **Done** — 2026-10-08 |
+| **M6** | Non-image uploads | ⬜ **Next** |
 | **M7** | Fair use and operations | ⬜ |
 
 Three M0 measurements remain genuinely open and are **deliberately not ticked**: the gVisor
@@ -528,65 +528,79 @@ POSTs and then polls needs a sequence rather than one queued response.
 > milestone did not stand up. Writing one that cannot be verified would be worse than
 > recording the gap.
 
-## M5 — Parsed errors and navigation
+## ✅ M5 — Parsed errors and navigation — **DONE (2026-10-08)**
 
-**Prototyped during M0, and it is less risky than feared.** The findings below replace the
-earlier "this is a subproject, not a line item" framing — it is still real work, but the
-shape is now known.
+`backend/src/compiles/log_parser.py`, plus a problem list in the preview panel that opens the
+file and puts the cursor on the line.
 
-### What M0 established
+### Tested against real engine output, not hand-written logs
 
-**`-file-line-error` resolves subfile attribution correctly.** The hard case I expected to
-fight — an error buried inside an `\input`-ed file, where the line number could refer to the
-wrong file — just works: pdfTeX reports `./sections/bad.tex:1: Missing $ inserted.` **This
-retires the largest M5 risk.**
+Eight log fixtures in `backend/tests/unit/compiles/fixtures/`, produced by running the broken
+corpus through the actual pinned image. **7/7 of the error classes now resolve correctly**, up
+from the M0 prototype's 6/7.
 
-**Do not reuse `texoutparse`.** Measured against seven broken documents, it found errors in
-only 2 of 7 and **never returned a file or line**. It recognises the default `! message`
-format and misses the `file:line: message` format that `-file-line-error` produces — the one
-format we need. Its warning extraction is good (3/3 on undefined refs and citations).
-
-**A ~90-line parser got 6/7 root-cause-first**, with correct file and line:
-
-| Broken document | Root cause located |
+| Fixture | Located at |
 |---|---|
-| `undefined_command` | ✅ `./undefined_command.tex:4` |
-| `missing_dollar` (cascades to 2 errors) | ✅ `:4` — correct one ranked first |
-| `bad_environment` | ✅ `:6` |
-| `nested_error` (error inside `\input`) | ✅ `./sections/bad.tex:1` |
-| `missing_package` | ✅ `:2` — recovered by searching sources for the `\usepackage` |
-| `undefined_reference` | ✅ warnings, line 4, separated from errors |
-| `unbalanced_brace` | ❌ **no location exists in the log** |
+| `undefined_command` | `undefined_command.tex:4` |
+| `missing_dollar` | `:4` — the cascade's first entry |
+| `bad_environment` | `:6`, message rejoined across the wrap |
+| `nested_error` | **`sections/bad.tex:1`** — the subfile, not `main.tex` |
+| `missing_package` | `:2` — the `\usepackage`, recovered from the sources |
+| `unbalanced_brace` | file recovered, **line honestly `null`** |
+| `undefined_reference` | 0 errors, 2 warnings at line 4 |
+| `clean` | nothing |
 
-The prototype and corpus are in `~/lumen-m0/` (`parse_proto.py`, `corpus/broken/`).
+### Two things the M0 prototype got wrong
 
-### The residual difficulty
+**TeX hard-wraps the log at exactly 79 columns, mid-sentence.** `bad_environment` splits as
+`"... ended by "` / `"\end{enumerate}."`, so every pattern has to run over rejoined lines.
+The first implementation of `unwrap` was subtly broken — it tested the *joined* length, so
+once a line passed the margin it swallowed the rest of the log, collapsing 150 lines into 1.
+The continuation flag has to come from the chunk TeX just emitted.
 
-Not parsing. These three:
+**Unlocated errors often have an `l.<N>` marker a few lines below**, and a `<*> <file>` marker
+naming the file. That is how `unbalanced_brace` now gets a file where the prototype got
+nothing. For a missing package `l.<N>` is *approximate* — TeX reports where it noticed, line
+3, not the `\usepackage` on line 2 — so for that class a source scan wins and is preferred.
 
-1. **Errors with no location at all.** `! File ended while scanning use of \textbf.` carries
-   no file and no line. This is the genuinely hard class and it needs source-side inference —
-   for `missing_package` the prototype recovered the line by searching the sources for the
-   matching `\usepackage`, and the same trick will not generalise to brace mismatches.
-2. **Misleading locations.** `missing_package` logs `Emergency stop` at line 3 while the real
-   `\usepackage` is on line 2. **Follow-on lines must be suppressed, not ranked** — otherwise
-   the agent is sent to the wrong line, which is worse than no help.
-3. **Cascades.** One missing `$` produced errors on lines 4 and 5. Dedup and correct ranking
-   are what make the output usable.
+### Follow-on suppression is the part that prevents wrong answers
 
-### Work
+`Emergency stop` and `==> Fatal error` are logged **wherever TeX gave up, not where the fault
+is**. `missing_package` proves it: the stop is line 3, the cause line 2. Reporting them is
+exactly how a parser sends an agent to fix the wrong line, so they are dropped rather than
+ranked.
 
-- [ ] Parse to `(file, line, severity, message)` from `-file-line-error` output
-- [ ] Suppress follow-ons (`Emergency stop`, `==> Fatal error`) rather than reporting them
-- [ ] Deduplicate cascades; **rank the real error first**
-- [ ] Source-side inference for unlocated errors, starting with missing files/packages
-- [ ] Warnings surfaced separately: undefined references, undefined citations, overfull boxes
-- [ ] Click an error → open the file, scroll to the line
-- [ ] Grow the broken corpus — it is already the regression suite, and it is cheap to extend
-- [ ] Reconsider Overleaf's JS parser only if our own stalls; **check its licence first**
+### Honest limits
 
-**Done when** every document in the broken corpus yields one correct, clickable first error,
-and the two unlocatable classes degrade honestly rather than pointing somewhere wrong.
+- **Cascades are ranked, not fully collapsed.** Exact duplicates are dropped, but one missing
+  `$` can log at two adjacent lines (the `^`, then the paragraph end). The end-to-end check
+  returns 3 errors for 2 faults. The first is still the right one, and a heuristic that
+  collapsed same-message adjacent lines could hide a genuine second fault — a worse trade than
+  a little noise.
+- **Parsed on read, not stored.** The log is the source of truth, so improving the parser
+  improves old jobs with no migration. `error_count` on the row now comes from the parser
+  rather than a raw regex.
+- Overleaf's parser was not needed, so its licence never had to be checked.
+
+### Navigation
+
+`compile-errors.tsx` lists errors first, then warnings behind a count. Clicking resolves the
+diagnostic's path through the file tree (`findNodeByPath`), opens the file and calls Monaco's
+`revealLineInCenter`. A diagnostic with no file is shown but not clickable — it says
+`location unknown` rather than pretending.
+
+The preview panel now has three panes — **PDF, Problems, Log** — and with no explicit choice
+it follows the compile: the PDF when there is one, the problems when the build failed.
+
+### Verified end to end
+
+A project whose `main.tex` `\input`s a broken subfile: compile failed, and the API returned
+the first error as **`sections/bad.tex:1`** with no follow-on noise.
+
+### Tests
+
+22 parser tests, 1 API test for the diagnostics shape, 8 for `findNodeByPath`, 2 more for the
+hook. **Backend 159, frontend 139 — all passing.** Lint clean, production build succeeds.
 
 ## M6 — Non-image uploads
 

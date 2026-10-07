@@ -43,6 +43,15 @@ function pollDelay(attempt: number) {
   return POLL_BACKOFF_MS[Math.min(attempt, POLL_BACKOFF_MS.length - 1)];
 }
 
+export type PreviewView = "pdf" | "problems" | "log";
+
+export type CompileDiagnostic = {
+  severity: "error" | "warning";
+  message: string;
+  file: string | null;
+  line: number | null;
+};
+
 type CompileState = {
   jobId: number | null;
   status: CompileStatus;
@@ -51,11 +60,15 @@ type CompileState = {
   hasPdf: boolean;
   message: string | null;
   log: string | null;
-  isLogOpen: boolean;
+  errors: CompileDiagnostic[];
+  warnings: CompileDiagnostic[];
+  // Which pane the preview shows. `null` means "follow the compile": the PDF
+  // when there is one, the problem list when the build failed.
+  view: PreviewView | null;
   compile: (projectId: string) => Promise<void>;
   cancel: (projectId: string) => Promise<void>;
   loadLog: (projectId: string) => Promise<void>;
-  setLogOpen: (open: boolean) => void;
+  setView: (view: PreviewView | null) => void;
   reset: () => void;
 };
 
@@ -67,7 +80,9 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
   hasPdf: false,
   message: null,
   log: null,
-  isLogOpen: false,
+  errors: [],
+  warnings: [],
+  view: null,
 
   compile: async (projectId: string) => {
     const current = get().status;
@@ -75,7 +90,16 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
       return;
     }
 
-    set({ status: "queued", message: null, log: null, errorCount: null, hasPdf: false });
+    set({
+      status: "queued",
+      message: null,
+      log: null,
+      errors: [],
+      warnings: [],
+      errorCount: null,
+      hasPdf: false,
+      view: null,
+    });
 
     const { payload } = await requestApi<CompileJob>(`/api/projects/${projectId}/compile`, {
       method: "POST",
@@ -146,17 +170,22 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
       return;
     }
 
-    const { payload } = await requestApi<{ log: string; error_count: number | null }>(
-      `/api/projects/${projectId}/compile/${jobId}/log`
-    );
+    const { payload } = await requestApi<{
+      log: string;
+      error_count: number | null;
+      errors: CompileDiagnostic[];
+      warnings: CompileDiagnostic[];
+    }>(`/api/projects/${projectId}/compile/${jobId}/log`);
 
     set({
       log: payload.data?.log ?? "",
+      errors: payload.data?.errors ?? [],
+      warnings: payload.data?.warnings ?? [],
       errorCount: payload.data?.error_count ?? get().errorCount,
     });
   },
 
-  setLogOpen: (open: boolean) => set({ isLogOpen: open }),
+  setView: (view: PreviewView | null) => set({ view }),
 
   reset: () =>
     set({
@@ -167,6 +196,8 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
       hasPdf: false,
       message: null,
       log: null,
-      isLogOpen: false,
+      errors: [],
+      warnings: [],
+      view: null,
     }),
 }));

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 import subprocess
 import time
@@ -10,6 +9,7 @@ from pathlib import Path
 
 from sqlmodel import Session
 
+from src.compiles.log_parser import count_errors, parse_log
 from src.compiles.models import (
     STATUS_FAILURE,
     STATUS_SUCCESS,
@@ -35,14 +35,10 @@ logger = logging.getLogger(__name__)
 # compile.sh maps a watchdog kill to 124; see compile/compile.sh.
 EXIT_TIMEOUT = 124
 
-# Enough to report a count. The real parser is M5 -- see
-# docs/plans/latex-compilation.md -- and lives with error navigation.
-_FILE_LINE_ERROR = re.compile(r"^[^\s:][^:]*:\d+:\s*\S", re.MULTILINE)
-_BANG_ERROR = re.compile(r"^!\s+\S", re.MULTILINE)
 
-
-def _count_errors(log_text: str) -> int:
-    return len(_FILE_LINE_ERROR.findall(log_text)) + len(_BANG_ERROR.findall(log_text))
+def _count_errors(log_text: str, source_dir: Path | None = None) -> int:
+    """Count real errors, after follow-on suppression and deduplication."""
+    return count_errors(parse_log(log_text, source_dir))
 
 
 def _work_dir(settings: Settings, project_id: int) -> Path:
@@ -124,7 +120,7 @@ def run_job(session: Session, job: CompileJob, settings: Settings | None = None)
         session, job, status,
         exit_code=result.returncode,
         duration_ms=duration_ms,
-        error_count=_count_errors(log_text) if log_text else None,
+        error_count=_count_errors(log_text, work_dir) if log_text else None,
         **produced,
     )
 

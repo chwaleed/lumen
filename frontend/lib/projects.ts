@@ -82,3 +82,39 @@ export function findInitialOpenFile(entries: ProjectFileEntry[]) {
 
   return fileEntries.find((entry) => entry.name === "main.tex") ?? fileEntries[0];
 }
+
+/**
+ * Find a node by its path relative to the project root, e.g. `sections/bad.tex`.
+ *
+ * The tree stores names, not paths, so a compiler diagnostic -- which names a
+ * path -- has to be walked back to a node before the file can be opened.
+ */
+export function findNodeByPath(nodes: FileNode[], path: string): FileNode | null {
+  const segments = path.split("/").filter((segment) => segment && segment !== ".");
+  if (segments.length === 0) {
+    return null;
+  }
+
+  let current: FileNode[] = nodes;
+  let found: FileNode | null = null;
+
+  for (const [index, segment] of segments.entries()) {
+    const isLast = index === segments.length - 1;
+    const match = current.find(
+      (node) => node.name === segment && (isLast ? node.type === "file" : node.type === "folder")
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    if (isLast) {
+      found = match;
+      break;
+    }
+
+    current = match.children ?? [];
+  }
+
+  return found;
+}

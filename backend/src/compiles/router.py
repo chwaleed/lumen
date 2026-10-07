@@ -8,7 +8,12 @@ from sqlmodel import Session
 from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
 from src.compiles.models import CompileJob
-from src.compiles.schemas import CompileJobResponse, CompileLogResponse
+from src.compiles.log_parser import SEVERITY_ERROR, parse_log
+from src.compiles.schemas import (
+    CompileDiagnostic,
+    CompileJobResponse,
+    CompileLogResponse,
+)
 from src.compiles.service import (
     cancel_queued_job,
     create_job,
@@ -103,11 +108,26 @@ def get_compile_log(
         if path.exists():
             log_text = path.read_text(encoding="utf-8", errors="replace")
 
+    # Parsed on read rather than stored: the log is the source of truth, and
+    # improving the parser should improve old jobs too, without a migration.
+    source_dir = Path(settings.compile_work_dir) / str(job.project_id)
+    diagnostics = parse_log(log_text, source_dir if source_dir.exists() else None)
+
     return ApiResponseBuilder.success(
         data=CompileLogResponse(
             job_id=job.id,
             status=job.status,
             error_count=job.error_count,
+            errors=[
+                CompileDiagnostic(**d.as_dict())
+                for d in diagnostics
+                if d.severity == SEVERITY_ERROR
+            ],
+            warnings=[
+                CompileDiagnostic(**d.as_dict())
+                for d in diagnostics
+                if d.severity != SEVERITY_ERROR
+            ],
             log=log_text,
         ).model_dump(),
         message="Compile log.",

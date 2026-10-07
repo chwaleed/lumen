@@ -181,6 +181,43 @@ class TestReadCompile:
         assert response.content.startswith(b"%PDF")
 
 
+    def test_log_returns_ranked_diagnostics(self, api: TestClient) -> None:
+        h = _auth(api, "diag@example.com")
+        project_id = _new_project(api, h)
+        job_id = _queue(api, h, project_id)
+
+        from sqlmodel import Session
+
+        from src.compiles.models import CompileJob
+        from src.db.session import get_engine
+
+        settings = get_settings()
+        out = Path(settings.compile_output_dir) / str(job_id)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "main.log").write_text(
+            "./main.tex:4: Missing $ inserted.\n"
+            "./main.tex:4: Emergency stop.\n"
+            "LaTeX Warning: Reference `nope' on page 1 undefined on input line 9.\n"
+        )
+        with Session(get_engine(settings)) as session:
+            job = session.get(CompileJob, job_id)
+            job.log_path = f"{job_id}/main.log"
+            job.status = "failure"
+            session.add(job)
+            session.commit()
+
+        data = api.get(f"/projects/{project_id}/compile/{job_id}/log", headers=h).json()["data"]
+
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["file"] == "main.tex"
+        assert data["errors"][0]["line"] == 4
+        # The Emergency stop is suppressed, not ranked.
+        assert all("Emergency stop" not in e["message"] for e in data["errors"])
+        assert len(data["warnings"]) == 1
+        assert data["warnings"][0]["line"] == 9
+        assert data["log"].startswith("./main.tex:4:")
+
+
 class TestCancelCompile:
     def test_a_queued_job_can_be_cancelled(self, api: TestClient) -> None:
         h = _auth(api, "cancel@example.com")
