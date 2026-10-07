@@ -13,12 +13,14 @@ import { mock } from "bun:test";
 export type MockedResponse = { status: number; data: unknown };
 
 let nextResponse: MockedResponse | Error = { status: 200, data: null };
+let queue: Array<MockedResponse | Error> = [];
 
 export const axiosRequest = mock(async () => {
-  if (nextResponse instanceof Error) {
-    throw nextResponse;
+  const response = queue.length > 0 ? queue.shift()! : nextResponse;
+  if (response instanceof Error) {
+    throw response;
   }
-  return nextResponse;
+  return response;
 });
 
 mock.module("axios", () => ({
@@ -38,8 +40,25 @@ export function respondWithApi(
   nextResponse = { status, data: body };
 }
 
+/**
+ * Queues a sequence, one per call, for flows that make several requests --
+ * such as the compile hook, which POSTs and then polls. Once the sequence is
+ * exhausted the single `respondWith` value is used again.
+ */
+export function respondInOrder(responses: Array<MockedResponse | Error>) {
+  queue = [...responses];
+}
+
+/** Queues a sequence of successful API envelopes. */
+export function respondInOrderWithApi(
+  responses: Array<{ status: number; data?: unknown; success?: boolean; message?: string | null }>,
+) {
+  queue = responses.map(({ status, ...body }) => ({ status, data: body }));
+}
+
 /** Call from beforeEach so state never bleeds between tests. */
 export function resetAxiosMock() {
   nextResponse = { status: 200, data: null };
+  queue = [];
   axiosRequest.mockClear();
 }

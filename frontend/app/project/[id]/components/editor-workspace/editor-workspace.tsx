@@ -160,7 +160,7 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
                 minSize={!isMobile && editorOpen ? minWidths.preview : 20}
                 maxSize={!isMobile && editorOpen ? maxWidths.preview : undefined}
               >
-                <PreviewPanel latexCode={activeFileContent} />
+                <PreviewPanel />
               </ResizablePanel>
             ) : null}
           </ResizablePanelGroup>

@@ -20,7 +20,26 @@ its own work.
 
 ---
 
-## M0 — Measure first — **DONE (2026-10-06/07)**
+## Progress
+
+| | Milestone | Status |
+|---|---|---|
+| **M0** | Measure first | ✅ **Done** — 2026-10-06/07 |
+| **M1** | Compile by hand, no application | ✅ **Done** — 2026-10-07 |
+| **M2** | Compile service, worker and CLI | ✅ **Done** — 2026-10-07 |
+| **M3** | API | ✅ **Done** — 2026-10-07 |
+| **M4** | PDF in the editor | ✅ **Done** — 2026-10-08 |
+| **M5** | Parsed errors and navigation | ⬜ **Next** — prototyped in M0, not built |
+| **M6** | Non-image uploads | ⬜ |
+| **M7** | Fair use and operations | ⬜ |
+
+Three M0 measurements remain genuinely open and are **deliberately not ticked**: the gVisor
+comparison (needs root and a non-Snap Docker host), a dedicated-host concurrency knee, and a
+run against real theses rather than the generated corpus. See [M0's own list](#still-open).
+
+---
+
+## ✅ M0 — Measure first — **DONE (2026-10-06/07)**
 
 Measured on the dev machine: 12 cores, 23 GB RAM, `texlive/texlive:latest` (TeX Live 2026).
 **Caveat on every number: ~20 other containers were running** (Postgres, the Supabase stack),
@@ -241,7 +260,7 @@ bibliography failure is exactly the kind of bug that reaches a user as "my citat
 - [ ] Measure with **real** theses rather than a generated corpus. The generated one is
       structurally realistic but its content is `lipsum`.
 
-## M1 — Compile by hand, no application — **DONE (2026-10-07)**
+## ✅ M1 — Compile by hand, no application — **DONE (2026-10-07)**
 
 Lives in [`compile/`](../../compile/). Three files, no application code:
 
@@ -299,7 +318,7 @@ nothing ran is worse than no check.**
 > drops `no-new-privileges`, which Snap breaks. Neither workaround is needed on Docker CE,
 > and production must not use Snap.
 
-## M2 — Compile service and worker, driven from a CLI — **DONE (2026-10-07)**
+## ✅ M2 — Compile service and worker, driven from a CLI — **DONE (2026-10-07)**
 
 No HTTP. A job can be created, claimed, compiled and recorded end to end.
 
@@ -367,7 +386,7 @@ written to disk, so `..`, `/`, `\` and empty names raise. A silently renamed fil
 Docker: path building, unsafe-name rejection, root-file resolution, manifest pruning,
 artifact survival, queue claiming, double-claim prevention, stale reaping, error counting.
 
-## M3 — API — **DONE (2026-10-07)**
+## ✅ M3 — API — **DONE (2026-10-07)**
 
 Five endpoints in `src/compiles/router.py`, all ownership-scoped and returning **404, not
 403**, for another user's project or job
@@ -432,21 +451,82 @@ exists, PDF bytes served with the right content type, cancellation, 409 on a run
 > not a per-request choice). `COMPILE_MAX_CONCURRENT_PER_USER` and `COMPILE_MAX_PROJECT_BYTES`
 > belong to M7 with the rest of fair use.
 
-## M4 — PDF in the editor
+## ✅ M4 — PDF in the editor — **DONE (2026-10-08)**
 
-- [ ] Replace the raw-source placeholder in the preview panel with a real PDF viewer
-      (`pdf.js` / `react-pdf`), with page navigation and zoom
-- [ ] Wire both existing dead PDF buttons
-- [ ] **Remove the "Auto-compile On" badge.** It is a label for a feature that does not
-      exist, and shipping it trains users not to believe the interface. Reinstate it only
-      when auto-compile is real
-- [ ] Poll job status with backoff; show queued / running / failed distinctly
-- [ ] Colours from semantic tokens in `app/globals.css` only — no raw palette values
-- [ ] Client calls use relative paths; the browser never reaches port 9000 directly
+The first user-visible change in Phase 1: press Compile, get a PDF.
 
-**Done when** pressing Compile shows a PDF, and a failure shows the log instead.
+### Components
 
----
+`app/project/[id]/components/preview-panel/` — a folder, per the component standards, with
+one export named after it:
+
+| File | Responsibility |
+|---|---|
+| `preview-panel.tsx` | Composition root: header, status, PDF-or-log switch |
+| `pdf-viewer.tsx` | The viewer |
+| `compile-status.tsx` | Status badge, replacing the fake "Auto-compile On" |
+| `compile-log.tsx` | Raw log when a build fails |
+| `preview-empty-state.tsx` | Before the first compile, and while one runs |
+
+`app/project/[id]/use-compile-hook.ts` is a **separate** Zustand store from
+`use-project-editor-hook`, which is already 895 lines. Compilation has its own lifecycle
+(queue → poll → settle) and needs none of the editor's file or tab state.
+
+Four proxy routes under `app/api/projects/[id]/compile/`, so the browser never reaches port
+9000 directly.
+
+### The viewer is an iframe, not pdf.js
+
+This plan originally said pdf.js or react-pdf. **It uses the browser's own viewer instead** —
+Chrome and Firefox both ship one with page navigation, zoom, search and print, and the proxy
+route is same-origin so the session cookie rides along. That is **zero new dependencies** for
+the feature the milestone exists to deliver.
+
+Reach for pdf.js when we need what the built-in viewer cannot do: SyncTeX click-to-source, or
+drawing error markers over the page. Both are M5 and later, and `pdf-viewer.tsx` is the one
+file that changes.
+
+### The PDF proxy needed a binary path
+
+`fetchBackendWithAuth` is axios-and-JSON shaped, so `fetchBackendBinaryWithAuth` was added
+alongside it rather than bolting a mode flag onto the shared helper — the two return
+different shapes, and one function returning either reads worse than two that each do one
+thing. It repeats the refresh-on-401 dance, which is the cost of that choice.
+
+### Polling backs off
+
+`[400, 600, 900, 1400, 2000, 3000]` ms. A warm rebuild lands in ~1.4 s and a cold one takes
+~36 s, so a fixed fast interval would be mostly wasted requests. The loop checks the job id
+on every tick and abandons its own if a newer compile has superseded it, rather than writing
+a stale status over the new one.
+
+### What was removed
+
+**The "Auto-compile On" badge is gone.** It was a label for a feature that did not exist, and
+[ai-agent-vision.md §9](../product/ai-agent-vision.md) is right that shipping one trains users
+not to believe the interface. The badge now reports what actually happened: queued,
+compiling, compiled in 1.4 s, 2 errors, timed out, cancelled.
+
+Both dead PDF buttons are wired. Compile queues and shows a spinner; Export PDF is a plain
+`<a download>` to the proxy route, disabled until a PDF exists — the browser saves bytes the
+route already serves, so nothing is held in memory.
+
+### Verified
+
+Typecheck clean, `bun run lint` clean, production build succeeds with all four routes
+registered, semantic tokens only (no raw palette values or hex), kebab-case filenames.
+
+**13 new unit tests** in `frontend/tests/unit/compile/`, **frontend total 130, all passing**:
+poll-to-success, log fetched on failure but not on success, the in-flight guard, a refused
+submission, the superseded-job guard, cancellation, and a refused cancellation.
+
+The shared `axios-mock` gained `respondInOrder` / `respondInOrderWithApi`, because a flow that
+POSTs and then polls needs a sequence rather than one queued response.
+
+> **Gap, stated plainly: no e2e test for this yet.** `frontend/tests/e2e/compile/` would need
+> the backend, a running worker and Docker all up, which is a `@backend`-tagged test this
+> milestone did not stand up. Writing one that cannot be verified would be worse than
+> recording the gap.
 
 ## M5 — Parsed errors and navigation
 

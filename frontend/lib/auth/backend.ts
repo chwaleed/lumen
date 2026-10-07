@@ -123,3 +123,45 @@ export async function postBackendAuth<TData>(
     body,
   });
 }
+
+/** A binary response from the backend, for endpoints that return bytes. */
+export type BackendBinaryResponse = {
+  status: number;
+  body: ArrayBuffer | null;
+  contentType: string | null;
+};
+
+/**
+ * Fetch bytes rather than JSON.
+ *
+ * The compile PDF endpoint is the only backend route that does not return the
+ * `{success, message, data}` envelope, because wrapping a PDF would mean base64
+ * and a decode step before the viewer could open it.
+ */
+export async function fetchBackendBinary(
+  path: string,
+  options: Omit<BackendRequestOptions, "body" | "method"> = {}
+): Promise<BackendBinaryResponse> {
+  try {
+    const response = await backendClient.request<ArrayBuffer>({
+      url: `${getBackendUrl()}${path}`,
+      method: "GET",
+      responseType: "arraybuffer",
+      headers: {
+        ...(options.accessToken
+          ? {
+              Authorization: `Bearer ${options.accessToken}`,
+            }
+          : {}),
+      },
+    });
+
+    return {
+      status: response.status,
+      body: response.data ?? null,
+      contentType: (response.headers["content-type"] as string | undefined) ?? null,
+    };
+  } catch {
+    return { status: 502, body: null, contentType: null };
+  }
+}
