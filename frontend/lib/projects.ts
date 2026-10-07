@@ -8,6 +8,7 @@ export type ProjectFileEntry = {
   type: "file" | "folder";
   mime_type: string | null;
   file_url: string | null;
+  size_bytes: number | null;
   content: string | null;
   snapshot_version: number | null;
   created_at: string;
@@ -117,4 +118,40 @@ export function findNodeByPath(nodes: FileNode[], path: string): FileNode | null
   }
 
   return found;
+}
+
+/**
+ * Extensions the backend will sign an upload for.
+ *
+ * Mirrors ALLOWED_EXTENSIONS in backend/src/uploads/service.py. Checked here
+ * only to fail fast with a clear message -- the backend is the authority, and
+ * it derives the content type from the extension because browsers report no
+ * usable type for .sty, .cls or .bst.
+ */
+export const UPLOADABLE_EXTENSIONS = [
+  ".bib",
+  ".bst",
+  ".cfg",
+  ".clo",
+  ".cls",
+  ".def",
+  ".eps",
+  ".gif",
+  ".jpeg",
+  ".jpg",
+  ".ldf",
+  ".pdf",
+  ".png",
+  ".sty",
+  ".svg",
+  ".webp",
+] as const;
+
+export function fileExtension(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  return dot <= 0 ? "" : fileName.slice(dot).toLowerCase();
+}
+
+export function isUploadable(fileName: string): boolean {
+  return (UPLOADABLE_EXTENSIONS as readonly string[]).includes(fileExtension(fileName));
 }

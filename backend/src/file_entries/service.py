@@ -75,6 +75,7 @@ def serialize_file_entry(session: Session, file_entry: FileEntry) -> FileEntryRe
         type=file_entry.type,
         mime_type=file_entry.mime_type,
         file_url=file_entry.file_url,
+        size_bytes=file_entry.size_bytes,
         content=None if latest_snapshot is None else latest_snapshot.content,
         snapshot_version=None if latest_snapshot is None else latest_snapshot.version,
         created_at=file_entry.created_at,
@@ -106,6 +107,7 @@ def create_file_entry(
         type=payload.type,
         mime_type=payload.mime_type if payload.type == "file" else None,
         file_url=payload.file_url if payload.type == "file" else None,
+        size_bytes=payload.size_bytes if payload.type == "file" else None,
     )
     session.add(file_entry)
     session.flush()

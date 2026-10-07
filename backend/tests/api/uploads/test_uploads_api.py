@@ -33,7 +33,7 @@ def test_returns_a_presigned_url(
     response = request_url(
         client,
         auth_headers,
-        {"project_id": project_id, "file_name": "figure.png", "content_type": "image/png"},
+        {"project_id": project_id, "file_name": "figure.png", "content_type": "image/png", "size_bytes": 2048},
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -44,13 +44,15 @@ def test_returns_a_presigned_url(
 
 
 @mock_aws
-def test_rejects_a_non_image_upload(
+def test_rejects_an_extension_outside_the_allowlist(
     client: TestClient, auth_headers: dict[str, str], project_id: int, aws_credentials: None
 ) -> None:
+    # .pdf and .bib are allowed now -- M6 exists because no real project could
+    # build without them. An executable still is not.
     response = request_url(
         client,
         auth_headers,
-        {"project_id": project_id, "file_name": "paper.pdf", "content_type": "application/pdf"},
+        {"project_id": project_id, "file_name": "payload.exe", "content_type": "application/pdf", "size_bytes": 2048},
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -61,7 +63,7 @@ def test_rejects_a_non_image_upload(
 def test_requires_authentication(client: TestClient, project_id: int, aws_credentials: None) -> None:
     response = client.post(
         "/uploads/presigned-url",
-        json={"project_id": project_id, "file_name": "figure.png", "content_type": "image/png"},
+        json={"project_id": project_id, "file_name": "figure.png", "content_type": "image/png", "size_bytes": 2048},
     )
 
     assert response.status_code in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}
@@ -76,7 +78,7 @@ def test_hides_another_user_s_project(
     response = request_url(
         client,
         intruder,
-        {"project_id": project_id, "file_name": "figure.png", "content_type": "image/png"},
+        {"project_id": project_id, "file_name": "figure.png", "content_type": "image/png", "size_bytes": 2048},
     )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -87,7 +89,7 @@ def test_rejects_a_missing_file_name(
     client: TestClient, auth_headers: dict[str, str], project_id: int, aws_credentials: None
 ) -> None:
     response = request_url(
-        client, auth_headers, {"project_id": project_id, "content_type": "image/png"}
+        client, auth_headers, {"project_id": project_id, "content_type": "image/png", "size_bytes": 2048}
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT

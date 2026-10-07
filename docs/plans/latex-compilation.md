@@ -30,8 +30,8 @@ its own work.
 | **M3** | API | ✅ **Done** — 2026-10-07 |
 | **M4** | PDF in the editor | ✅ **Done** — 2026-10-08 |
 | **M5** | Parsed errors and navigation | ✅ **Done** — 2026-10-08 |
-| **M6** | Non-image uploads | ⬜ **Next** |
-| **M7** | Fair use and operations | ⬜ |
+| **M6** | Non-image uploads | ✅ **Done** — 2026-10-08 |
+| **M7** | Fair use and operations | ⬜ **Next** — last one |
 
 Three M0 measurements remain genuinely open and are **deliberately not ticked**: the gVisor
 comparison (needs root and a non-Snap Docker host), a dedicated-host concurrency knee, and a
@@ -602,17 +602,74 @@ the first error as **`sections/bad.tex:1`** with no follow-on noise.
 22 parser tests, 1 API test for the diagnostics shape, 8 for `findNodeByPath`, 2 more for the
 hook. **Backend 159, frontend 139 — all passing.** Lint clean, production build succeeds.
 
-## M6 — Non-image uploads
+## ✅ M6 — Non-image uploads — **DONE (2026-10-08)**
 
-Roadmap 1.8. Today only images can be uploaded, so **real projects cannot build at all.**
+Before this, **only images could be uploaded, so no real project could build.** A thesis
+needs its `.bib`, and a journal submission needs the publisher's `.cls`.
 
-- [ ] Allow `.bib`, `.cls`, `.sty`, `.bst`, and common image formats
-- [ ] Keep the existing safety: extension and type allowlist, directory components stripped
-- [ ] Project size ceiling enforced server-side
-- [ ] These files are untrusted input executed by the compiler — the M1 hardening is what
-      makes this safe, so do not ship M6 before M1 is verified
+### The allowlist is extension-driven, not MIME-driven
 
----
+Browsers report `""` or `text/plain` for `.sty`, `.cls` and `.bst`, so a content-type
+allowlist would have rejected exactly the files the milestone exists to allow. The extension
+decides, and **the content type is derived from it** rather than taken from the client.
+
+| Allowed | |
+|---|---|
+| Compiler assets | `.bib` `.cls` `.sty` `.bst` `.cfg` `.clo` `.def` `.ldf` |
+| Figures | `.png` `.jpg` `.jpeg` `.gif` `.webp` `.svg` `.pdf` `.eps` |
+
+**`.tex` is deliberately excluded.** The editor owns `.tex` through snapshots; one uploaded
+to S3 would be read back from there and so be uneditable. The rejection message names the
+extension and lists the allowed ones, so nobody has to guess.
+
+### The size ceiling is enforced, not merely declared
+
+`ContentLength` is **signed into the presigned URL**, so S3 refuses a body of any other
+length. Without that, the ceiling would rest on the client telling the truth about how big
+its file is.
+
+- Per file: `UPLOAD_MAX_FILE_BYTES`, default 25 MB
+- Per project: `PROJECT_MAX_BYTES`, default 200 MB, summed over a new
+  `file_entries.size_bytes` column
+
+The column is trustworthy precisely because of the signature: a client cannot under-declare a
+size, upload more, and quietly grow the project past its ceiling.
+
+### Safety kept from before
+
+Directory components are still stripped — `../../../etc/passwd.png` becomes `passwd.png`, and
+the object key stays inside `uploads/<project>/`. A name that reduces to nothing is rejected.
+
+> These files are **untrusted input that the compiler then executes**, which is why this
+> milestone was gated behind M1's verified hardening rather than shipped alongside it.
+
+### Verified with a real compile
+
+`tests/integration/compiles/test_uploaded_assets.py` puts a custom `.sty` in a moto-backed S3
+bucket, registers it as an uploaded file, and compiles a document that `\usepackage`s it. Had
+the asset not been fetched from object storage and written to disk, pdfLaTeX would have failed
+with `File \`lumenstyle.sty' not found`.
+
+Marked `texlive` and **deselected by default** — CI cannot pull an 8.4 GB image per run.
+`pytest -m texlive` opts in, and `pytest.ini` now registers the marker.
+
+### Snap Docker, a third time
+
+The integration test first failed with a bare `exit=11`, because pytest's `tmp_path` lives
+under `/tmp` and Snap Docker mounts `/tmp` binds **empty** — the container saw no files at
+all. The test now uses a directory under the backend root, which works on any host. This is
+the third time that one host quirk has cost debugging time; it is in M0's findings, in
+`compile.sh`, in `verify.sh`, and now here.
+
+### Tests
+
+The old upload tests encoded the image-only rule and were rewritten rather than patched: a
+`.pdf` is now a legitimate figure, so "rejects a non-image upload" had to become "rejects an
+extension outside the allowlist".
+
+**Backend 174 (+1 deselected), frontend 156 — all passing.** Among them a **cross-language
+drift guard**: a frontend test reads `ALLOWED_EXTENSIONS` out of the Python source and asserts
+the TypeScript copy matches exactly, because two hand-maintained lists drift.
 
 ## M7 — Fair use and operations
 

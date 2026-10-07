@@ -46,6 +46,11 @@ class FileEntry(SQLModel, table=True):
 
     file_url: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
 
+    # Only set for uploaded assets. Summed to enforce the project ceiling, and
+    # trustworthy because S3 rejects a body whose length differs from the one
+    # signed into the upload URL.
+    size_bytes: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),

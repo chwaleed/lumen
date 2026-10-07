@@ -214,7 +214,7 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
         json={
             "project_id": project_id,
             "file_name": "figures/chart.png",
-            "content_type": "image/png",
+            "content_type": "image/png", "size_bytes": 2048,
         },
         headers=headers,
     )
@@ -235,7 +235,7 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
     assert captured_params["params"]["Key"] == f"uploads/{project_id}/chart.png"
 
 
-def test_presigned_upload_url_rejects_non_images(project_client: TestClient) -> None:
+def test_presigned_upload_url_rejects_an_uploaded_tex_file(project_client: TestClient) -> None:
     headers = _auth_headers(project_client)
     project_response = project_client.post(
         "/projects",
@@ -249,10 +249,14 @@ def test_presigned_upload_url_rejects_non_images(project_client: TestClient) -> 
         json={
             "project_id": project_id,
             "file_name": "main.tex",
-            "content_type": "text/x-tex",
+            "content_type": "text/x-tex", "size_bytes": 2048,
         },
         headers=headers,
     )
 
     assert upload_response.status_code == 400
-    assert upload_response.json()["message"] == "Only image uploads are allowed."
+    # The message names the rejected extension and lists the allowed ones, so a
+    # user is not left guessing what they can upload.
+    message = upload_response.json()["message"]
+    assert ".tex cannot be uploaded" in message
+    assert ".bib" in message and ".sty" in message

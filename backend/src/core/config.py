@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         default=900,
         alias="S3_PRESIGNED_URL_EXPIRES_SECONDS",
     )
+    # Uploads are untrusted input that the compiler then executes, and they land
+    # on the compile worker's disk. Generous by default; tighten only if abused.
+    upload_max_file_bytes: int = Field(default=25 * 1024 * 1024, alias="UPLOAD_MAX_FILE_BYTES")
+    project_max_bytes: int = Field(default=200 * 1024 * 1024, alias="PROJECT_MAX_BYTES")
 
     # Compilation. The work directory is kept PER PROJECT, not per job: latexmk's
     # .aux/.fdb_latexmk surviving between compiles is what makes a rebuild ~7s

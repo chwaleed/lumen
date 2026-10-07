@@ -10,6 +10,7 @@ class FileEntryCreateRequest(BaseModel):
     parent_id: int | None = None
     mime_type: str | None = Field(default=None, max_length=255)
     file_url: str | None = Field(default=None, max_length=255)
+    size_bytes: int | None = Field(default=None, ge=0)
 
 
 class FileEntryUpdateRequest(BaseModel):
@@ -27,6 +28,7 @@ class FileEntryResponse(BaseModel):
     type: Literal["file", "folder"]
     mime_type: str | None
     file_url: str | None
+    size_bytes: int | None = None
     content: str | None = None
     snapshot_version: int | None = None
     created_at: datetime

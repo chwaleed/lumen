@@ -6,10 +6,13 @@ import { addNode, deleteNode, moveNode, updateNode } from "@/components/editor-s
 import type { FileNode } from "@/components/editor-sidebar";
 import { postApi, requestApi } from "@/lib/http/client";
 import {
+  UPLOADABLE_EXTENSIONS,
   buildFileTree,
   createFileContents,
   createSnapshotVersions,
+  fileExtension,
   findInitialOpenFile,
+  isUploadable,
   type ProjectDetail,
   type ProjectFileEntry,
 } from "@/lib/projects";
@@ -507,18 +510,21 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       return;
     }
 
-    const contentType = file.type;
-    if (!contentType.startsWith("image/")) {
+    if (!isUploadable(file.name)) {
       set({
-        projectErrorMessage: "Only image uploads are allowed.",
+        projectErrorMessage: `${fileExtension(file.name) || "Files without an extension"} cannot be uploaded. Allowed: ${UPLOADABLE_EXTENSIONS.join(", ")}.`,
       });
       return;
     }
 
+    const contentType = file.type;
     const presignedResult = await postApi<PresignedUploadResponse>("/api/uploads/presigned-url", {
       project_id: Number(projectId),
       file_name: file.name,
-      content_type: contentType,
+      // Advisory: the backend decides the real type from the extension.
+      content_type: contentType || null,
+      // Signed into the upload URL, so S3 rejects a body of any other length.
+      size_bytes: file.size,
     });
 
     if (
@@ -554,8 +560,9 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       name: file.name,
       type: "file",
       parent_id: parentId ? Number(parentId) : null,
-      mime_type: contentType,
+      mime_type: signedContentType,
       file_url: uploadTarget.file_url,
+      size_bytes: file.size,
     });
 
     if (

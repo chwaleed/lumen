@@ -40,8 +40,18 @@ def project(session: Session, owner: User) -> Project:
     return project
 
 
-def request_for(project: Project, file_name: str = "figure.png", content_type: str = "image/png"):
-    return PresignedUploadRequest(project_id=project.id, file_name=file_name, content_type=content_type)
+def request_for(
+    project: Project,
+    file_name: str = "figure.png",
+    content_type: str | None = "image/png",
+    size_bytes: int = 1024,
+):
+    return PresignedUploadRequest(
+        project_id=project.id,
+        file_name=file_name,
+        content_type=content_type,
+        size_bytes=size_bytes,
+    )
 
 
 @mock_aws
@@ -85,8 +95,11 @@ def test_percent_encodes_spaces_in_the_file_url(
 @pytest.mark.parametrize(
     "file_name",
     [
-        "../../../etc/passwd",
-        "/etc/passwd",
+        # Extensions are allowed ones, so this tests the stripping rather than
+        # the allowlist; a traversal attempt with no extension is rejected
+        # outright by test_rejects_extensions_outside_the_allowlist.
+        "../../../etc/passwd.png",
+        "/etc/passwd.bib",
         "subdir/nested.png",
     ],
 )
@@ -123,29 +136,134 @@ def test_rejects_file_names_that_reduce_to_nothing(
 
 
 @mock_aws
-@pytest.mark.parametrize("content_type", ["application/pdf", "text/html", "application/octet-stream"])
-def test_rejects_non_image_content_types(
+@pytest.mark.parametrize("file_name", ["figure.png", "refs.bib", "thesis.cls", "custom.sty", "plain.bst", "plot.pdf", "diagram.eps"])
+def test_allows_the_assets_real_projects_need(
     session: Session,
     settings: Settings,
     owner: User,
     project: Project,
     aws_credentials: None,
-    content_type: str,
+    file_name: str,
 ) -> None:
-    with pytest.raises(HTTPException) as error:
-        create_presigned_upload(session, owner, settings, request_for(project, "x.png", content_type))
+    # Before M6 only images could be uploaded, so no real project could build.
+    response = create_presigned_upload(session, owner, settings, request_for(project, file_name))
 
-    assert error.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert "image" in error.value.detail.lower()
+    assert response.object_key == f"uploads/{project.id}/{file_name}"
 
 
 @mock_aws
-def test_normalises_content_type_casing_and_padding(
+@pytest.mark.parametrize("file_name", ["payload.exe", "archive.zip", "run.sh", "noextension"])
+def test_rejects_extensions_outside_the_allowlist(
+    session: Session,
+    settings: Settings,
+    owner: User,
+    project: Project,
+    aws_credentials: None,
+    file_name: str,
+) -> None:
+    with pytest.raises(HTTPException) as error:
+        create_presigned_upload(session, owner, settings, request_for(project, file_name))
+
+    assert error.value.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@mock_aws
+def test_rejects_an_uploaded_tex_file(
     session: Session, settings: Settings, owner: User, project: Project, aws_credentials: None
 ) -> None:
-    response = create_presigned_upload(session, owner, settings, request_for(project, "x.png", "  IMAGE/PNG  "))
+    # The editor owns .tex through snapshots; one read from S3 would be uneditable.
+    with pytest.raises(HTTPException) as error:
+        create_presigned_upload(session, owner, settings, request_for(project, "chapter.tex"))
 
-    assert response.headers == {"Content-Type": "image/png"}
+    assert error.value.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@mock_aws
+@pytest.mark.parametrize(
+    ("file_name", "expected"),
+    [("refs.bib", "text/plain"), ("thesis.cls", "text/plain"), ("figure.png", "image/png")],
+)
+def test_content_type_comes_from_the_extension_not_the_client(
+    session: Session,
+    settings: Settings,
+    owner: User,
+    project: Project,
+    aws_credentials: None,
+    file_name: str,
+    expected: str,
+) -> None:
+    # Browsers report "" or text/plain for .sty and .cls, so the client's claim
+    # cannot be trusted either to allow or to label.
+    response = create_presigned_upload(
+        session, owner, settings, request_for(project, file_name, "application/x-lies")
+    )
+
+    assert response.headers == {"Content-Type": expected}
+
+
+@mock_aws
+def test_signs_the_content_length_so_s3_enforces_the_size(
+    session: Session, settings: Settings, owner: User, project: Project, aws_credentials: None
+) -> None:
+    # Without the length in the signature the ceiling would rest on the client
+    # telling the truth about how big the file is.
+    response = create_presigned_upload(session, owner, settings, request_for(project, size_bytes=4096))
+
+    signed = urlparse(response.upload_url).query.lower()
+    assert "content-length" in signed
+
+
+@mock_aws
+def test_rejects_a_file_over_the_single_upload_limit(
+    session: Session, settings: Settings, owner: User, project: Project, aws_credentials: None
+) -> None:
+    oversized = settings.upload_max_file_bytes + 1
+
+    with pytest.raises(HTTPException) as error:
+        create_presigned_upload(session, owner, settings, request_for(project, size_bytes=oversized))
+
+    assert error.value.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+
+@mock_aws
+def test_rejects_an_upload_that_would_pass_the_project_ceiling(
+    session: Session, settings: Settings, owner: User, project: Project, aws_credentials: None
+) -> None:
+    from src.file_entries.models import FileEntry
+
+    session.add(
+        FileEntry(
+            project_id=project.id,
+            parent_id=None,
+            name="already-there.pdf",
+            type="file",
+            size_bytes=settings.project_max_bytes,
+        )
+    )
+    session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        create_presigned_upload(session, owner, settings, request_for(project, size_bytes=1))
+
+    assert error.value.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+
+@mock_aws
+def test_counts_only_the_projects_own_files(
+    session: Session, settings: Settings, owner: User, project: Project, aws_credentials: None
+) -> None:
+    from src.file_entries.models import FileEntry
+    from src.uploads.service import project_bytes_used
+
+    other = Project(name="Other", user_id=owner.id)
+    session.add(other)
+    session.commit()
+    session.refresh(other)
+    session.add(FileEntry(project_id=other.id, parent_id=None, name="big.pdf", type="file", size_bytes=999))
+    session.add(FileEntry(project_id=project.id, parent_id=None, name="small.pdf", type="file", size_bytes=10))
+    session.commit()
+
+    assert project_bytes_used(session, project.id) == 10
 
 
 @mock_aws
