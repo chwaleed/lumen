@@ -45,6 +45,12 @@ class Settings(BaseSettings):
         default=True,
         alias="SENTRY_SEND_DEFAULT_PII",
     )
+    # SQLAlchemy defaults to pool_size=5 + max_overflow=10 = 15 connections, which
+    # is the real ceiling: 40 anyio threads serve sync handlers, and compile
+    # workers poll the same database. 20+20 matches the threadpool.
+    db_pool_size: int = Field(default=20, alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=20, alias="DB_MAX_OVERFLOW")
+    db_pool_pre_ping: bool = Field(default=True, alias="DB_POOL_PRE_PING")
     s3_bucket_name: str = Field(alias="S3_BUCKET_NAME")
     s3_region: str = Field(alias="S3_REGION")
     s3_presigned_url_expires_seconds: int = Field(

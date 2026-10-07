@@ -192,6 +192,58 @@ def claim_next_job(session: Session) -> CompileJob | None:
     return job
 
 
+def get_job_for_project(session: Session, project: Project, job_id: int) -> CompileJob:
+    """A job, scoped to its project.
+
+    Returns 404 for a job belonging to someone else's project, like every other
+    resource here. See docs/decisions/0003-return-404-for-another-users-resource.md.
+    """
+    from fastapi import status as http_status
+
+    from src.shared.project_access import projects_exception
+
+    job = session.get(CompileJob, job_id)
+    if job is None or job.project_id != project.id:
+        raise projects_exception("Compile job not found.", http_status.HTTP_404_NOT_FOUND)
+    return job
+
+
+def cancel_queued_job(session: Session, job: CompileJob) -> CompileJob:
+    """Cancel a job that has not started.
+
+    A *running* compile is deliberately not cancellable yet: the container name
+    lives in the worker process, so stopping it needs the row to carry that name
+    and the API to kill it. That is M7's "cancel a running job and reap its
+    container" -- marking the row cancelled here would just race the worker's own
+    write and report a lie.
+    """
+    from fastapi import status as http_status
+
+    from src.compiles.models import STATUS_CANCELLED
+    from src.shared.project_access import projects_exception
+
+    if job.status != STATUS_QUEUED:
+        raise projects_exception(
+            f"Only a queued compile can be cancelled; this one is {job.status}.",
+            http_status.HTTP_409_CONFLICT,
+        )
+    job.status = STATUS_CANCELLED
+    job.finished_at = utc_now()
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def output_path(settings: Settings, relative: str) -> Path:
+    """Resolve an output path, refusing anything outside the output directory."""
+    root = Path(settings.compile_output_dir).resolve()
+    resolved = (root / relative).resolve()
+    if not resolved.is_relative_to(root):
+        raise MaterialiseError(f"Output path escapes the output directory: {relative!r}")
+    return resolved
+
+
 def reap_stale_jobs(session: Session, timeout_seconds: int) -> int:
     """Fail jobs whose worker died mid-compile.
 

@@ -10,12 +10,25 @@ from src.db.migrations import run_migrations
 _engines: dict[str, Engine] = {}
 
 
-def _create_engine(database_url: str) -> Engine:
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+def _create_engine(database_url: str, settings: Settings | None = None) -> Engine:
+    is_sqlite = database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+
+    # SQLite does not use a QueuePool, so pool sizing applies to Postgres only.
+    pool_kwargs = {}
+    if not is_sqlite:
+        app_settings = settings or get_settings()
+        pool_kwargs = {
+            "pool_size": app_settings.db_pool_size,
+            "max_overflow": app_settings.db_max_overflow,
+            "pool_pre_ping": app_settings.db_pool_pre_ping,
+        }
+
     engine = create_engine(
         database_url,
         echo=False,
         connect_args=connect_args,
+        **pool_kwargs,
     )
 
     if database_url.startswith("sqlite"):
@@ -34,7 +47,7 @@ def get_engine(settings: Settings | None = None):
     database_url = settings.database_url
 
     if database_url not in _engines:
-        _engines[database_url] = _create_engine(database_url)
+        _engines[database_url] = _create_engine(database_url, settings)
 
     return _engines[database_url]
 

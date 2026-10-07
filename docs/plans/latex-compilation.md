@@ -367,48 +367,70 @@ written to disk, so `..`, `/`, `\` and empty names raise. A silently renamed fil
 Docker: path building, unsafe-name rejection, root-file resolution, manifest pruning,
 artifact survival, queue claiming, double-claim prevention, stale reaping, error counting.
 
-## M3 — API
+## M3 — API — **DONE (2026-10-07)**
 
-**The schema and the queue already exist** — M2 added `projects.engine` and `compile_jobs`
-in `20261007_0001`. M3 only adds the HTTP surface. The columns, for reference:
-
-| Column | Type | Note |
-|---|---|---|
-| `id` | int PK | |
-| `project_id` | FK → projects, cascade | |
-| `root_file_id` | FK → file_entries | usually `main.tex` |
-| `engine` | str | snapshot of the project value at submit time |
-| `status` | str | `queued`, `running`, `success`, `failure`, `timeout`, `cancelled` |
-| `exit_code` | int, null | |
-| `duration_ms` | int, null | |
-| `error_count` | int, null | |
-| `pdf_path`, `log_path`, `synctex_path` | str, null | Relative to `COMPILE_OUTPUT_DIR` |
-| `created_at`, `started_at`, `finished_at` | timestamptz | |
-
-- [ ] *(done in M2)* Indexes on `(project_id, created_at)` and `(status, created_at)`
-- [ ] Endpoints, all ownership-scoped, returning **404 not 403** for another user's project
-      per [ADR 0003](../decisions/0003-return-404-for-another-users-resource.md):
+Five endpoints in `src/compiles/router.py`, all ownership-scoped and returning **404, not
+403**, for another user's project or job
+([ADR 0003](../decisions/0003-return-404-for-another-users-resource.md)).
 
 ```
-POST   /projects/{id}/compile              → 202 { job_id }
-GET    /projects/{id}/compile/{job_id}     → status, timings, error count
-GET    /projects/{id}/compile/{job_id}/pdf → presigned URL
-GET    /projects/{id}/compile/{job_id}/log → parsed errors + raw log
-DELETE /projects/{id}/compile/{job_id}     → cancel
+POST   /projects/{id}/compile[?root_file_id=]  → 202, the queued job
+GET    /projects/{id}/compile/{job_id}         → status, timings, error count
+GET    /projects/{id}/compile/{job_id}/log     → raw log + error count
+GET    /projects/{id}/compile/{job_id}/pdf     → the PDF bytes
+DELETE /projects/{id}/compile/{job_id}         → cancel a queued compile
 ```
 
-- [ ] Responses go through `ApiResponseBuilder`, so every one is `{success, message, data}`
-- [ ] New settings in `Settings` — **no bare `os.getenv`**:
-      `TEXLIVE_IMAGE`, `REDIS_URL`, `COMPILE_TIMEOUT_SECONDS`, `COMPILE_MEMORY_MB`,
-      `COMPILE_CPUS`, `COMPILE_TMPFS_MB`, `COMPILE_MAX_CONCURRENT_PER_USER`,
-      `COMPILE_MAX_PROJECT_BYTES`. Placeholders into `.env.example`
-- [ ] **Raise the SQLAlchemy pool.** The default `pool_size=5` + `max_overflow=10` = 15
-      connections against 40 anyio threads plus workers is the real ceiling, and it bites
-      around 15 concurrent queries — well before 100 users
+### Verified over HTTP, with the real worker and real Docker
 
-**Done when** a compile can be submitted, polled and fetched over HTTP.
+| Step | Result |
+|---|---|
+| `POST /compile` | **202**, `status=queued` |
+| worker `run_once()` | `success`, **1,418 ms**, exit 0 |
+| `GET /compile/{id}` | 200, `has_pdf=true`, `error_count=0` |
+| `GET /compile/{id}/pdf` | 200, `application/pdf`, 29,139 bytes, `%PDF-` magic |
+| `GET /compile/{id}/log` | 200, 10,793 chars, 0 undefined references |
+| Same PDF, different user | **404** |
 
----
+### Decisions taken here
+
+**The PDF endpoint is the one exception to the response envelope.** Everything else returns
+`{success, message, data}` via `ApiResponseBuilder`, per CLAUDE.md. A PDF is bytes: wrapping
+it would mean base64, a third more payload, and a decode step before `pdf.js` could open it.
+The exception is marked in the router so it reads as a decision rather than an oversight.
+
+**`DELETE` cancels a *queued* compile only; a running one is 409.** The container name lives
+in the worker process, so stopping a running compile needs the row to carry that name and the
+API to kill it — that is M7's "cancel a running job and reap its container". Marking the row
+cancelled now would race the worker's own write and report something untrue.
+
+**The log endpoint returns the raw log.** Parsed `(file, line, severity, message)` is M5's
+job; until it exists the client shows the engine's own output rather than a wrong guess.
+
+**Output paths are resolved against the output directory and refused if they escape it.**
+`output_path()` resolves and checks containment — the stored path is ours, but it reaches the
+filesystem, so it is treated as a boundary.
+
+### The pool is raised
+
+`pool_size=20`, `max_overflow=20` — 40 connections, matching the anyio threadpool, settable
+via `DB_POOL_SIZE` / `DB_MAX_OVERFLOW`, plus `pool_pre_ping`. SQLAlchemy's default of 15 was
+the real ceiling, and [ADR 0011](../decisions/0011-postgres-as-the-compile-queue.md) made
+fixing it mandatory rather than advisable, because workers now poll the same database. The
+sizing applies to Postgres only: SQLite does not use a `QueuePool`.
+
+### Tests
+
+13 new API tests in `backend/tests/api/compiles/`. **Backend total 136, all passing.** They
+cover the 202, cross-user 404s on both project and job, a folder rejected as a compile root,
+a root file from another project, an empty log before the worker runs, a 404 PDF before one
+exists, PDF bytes served with the right content type, cancellation, 409 on a running job, and
+409 on a double cancel.
+
+> Settings named in the original sketch that no longer exist: `REDIS_URL` (there is no Redis —
+> ADR 0011), `COMPILE_TMPFS_MB` (fixed in `compile.sh`, where the 512 MB that biber needs is
+> not a per-request choice). `COMPILE_MAX_CONCURRENT_PER_USER` and `COMPILE_MAX_PROJECT_BYTES`
+> belong to M7 with the rest of fair use.
 
 ## M4 — PDF in the editor
 
