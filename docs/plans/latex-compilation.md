@@ -241,29 +241,63 @@ bibliography failure is exactly the kind of bug that reaches a user as "my citat
 - [ ] Measure with **real** theses rather than a generated corpus. The generated one is
       structurally realistic but its content is `lipsum`.
 
-## M1 — Compile by hand, no application
+## M1 — Compile by hand, no application — **DONE (2026-10-07)**
 
-Prove the image, flags and hardening in isolation before any code depends on them.
+Lives in [`compile/`](../../compile/). Three files, no application code:
 
-- [ ] Pin a dated tag (`texlive/texlive:TL2026-...`). **Never `latest`** — it is rebuilt
-      weekly, which defeats the reproducibility TeX Live was chosen for
-- [ ] Build a thin `lumen-tex` image on it, carrying only an overridden `texmf.cnf`
-- [ ] Set `shell_escape=p`, `openin_any=p`, `openout_any=p`
-      ([ADR 0009](../decisions/0009-use-restricted-shell-escape.md)). `openin_any` ships as
-      `a` — read any file — so this is a real change and not a formality. **Never pass
-      `-shell-escape`**, which turns restricted into unrestricted
-- [ ] Write the `docker run` invocation from the hardening checklist below
-- [ ] Verify, and expect these specific results from M0: `\write18{id}` **refused**;
-      `\openin` of `/etc/passwd` **blocked**; `\input{/etc/passwd}` **still succeeds** —
-      the container is the only barrier; a runaway loop killed by `docker kill` **by name**;
-      a memory bomb hitting the cgroup limit rather than the host
-- [ ] Verify no secret in the container environment reaches a log via `/proc/self/environ`
-- [ ] Verify a real thesis from the M0 corpus builds, with bibliography resolved
+| File | What it is |
+|---|---|
+| [`compile/Dockerfile`](../../compile/Dockerfile) | The image: pinned TeX Live, hardened `texmf.cnf`, caches baked |
+| [`compile/compile.sh`](../../compile/compile.sh) | **The exact command the M2 supervisor shells out to.** Nothing else should build a `docker run` for LaTeX |
+| [`compile/verify.sh`](../../compile/verify.sh) | The sandbox regression suite. Re-run after every TeX Live upgrade |
 
-**Done when** the exact command line that the service will shell out to is written down and
-every item above is checked.
+```bash
+cd compile && docker build -t lumen-tex:latest . && ./verify.sh
+./compile.sh --work /path/to/project --root main.tex --engine pdflatex
+```
 
----
+### Pinned by digest, not tag
+
+```
+FROM texlive/texlive@sha256:a7ae4dfa9d521b5db14446872fa488b839021d1f604d0a3c74461784895f2a67
+```
+
+The multi-arch index for `texlive/texlive:latest` on 2026-10-06, carrying linux/amd64 and
+linux/arm64. **No immutable dated tag exists** for the current release, so the digest is the
+only reproducible reference. Upgrading TeX Live means editing that line deliberately and
+re-running `verify.sh`.
+
+### Verification — 12/12
+
+| | Check | Result |
+|---|---|---|
+| ✅ | `shell_escape`, `openin_any`, `openout_any` all `p` | as built |
+| ✅ | Arbitrary `\write18` | refused |
+| ✅ | `\openin` of `/etc/passwd` | blocked |
+| ⚠️ | `\input{/etc/passwd}` | **succeeds, by design** — `openin_any` governs `\openin` only. The container is the only barrier, and `verify.sh` flags it if upstream ever changes |
+| ✅ | Credential-shaped variable in the environment | none present |
+| ✅ | Runaway loop | killed by the deadline at 15 s, `rc=124` |
+| ✅ | Log bomb | **capped at 100 MB by `--ulimit fsize`** |
+| ✅ | Container after a kill | none survived |
+| ✅ | `minted` under restricted shell escape | **highlights correctly** — [ADR 0009](../decisions/0009-use-restricted-shell-escape.md) validated end to end |
+| ✅ | A real document with TikZ, refs and equations | PDF produced |
+| ✅ | SyncTeX | `t.synctex.gz` written |
+
+### Two things M1 added that M0 had not solved
+
+**`--ulimit fsize=104857600`.** M0 found an uncapped project mount take a 186 MB log. One
+flag caps any single file at 100 MB — no root, no quota, no tmpfs gymnastics. Verified.
+
+**`verify.sh` fails loudly rather than silently passing.** The first run reported PASS on
+every attack check while nothing had compiled at all, because `mktemp -d` put the work
+directory in `/tmp` and Snap Docker mounts `/tmp` binds empty — M0's own finding, walked into
+while writing the suite. There is now a preflight that proves the bind mount is visible, and
+every check asserts a log exists before judging. **A security check that passes because
+nothing ran is worse than no check.**
+
+> On a Snap Docker host, run `TMPDIR="$HOME" LUMEN_SECOPT= ./verify.sh`. `LUMEN_SECOPT=`
+> drops `no-new-privileges`, which Snap breaks. Neither workaround is needed on Docker CE,
+> and production must not use Snap.
 
 ## M2 — Compile service and worker, driven from a CLI
 
