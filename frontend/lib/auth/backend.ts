@@ -50,6 +50,9 @@ type BackendRequestOptions = {
   accessToken?: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
+  // Overrides the JSON default. Import posts a zip as the raw body, which
+  // axios would otherwise try to serialise.
+  contentType?: string;
 };
 
 function getBackendUrl() {
@@ -83,6 +86,7 @@ export async function fetchBackend<TData>(
       url: `${getBackendUrl()}${path}`,
       method: options.method ?? "GET",
       headers: {
+        "Content-Type": options.contentType ?? "application/json",
         ...(options.accessToken
           ? {
               Authorization: `Bearer ${options.accessToken}`,

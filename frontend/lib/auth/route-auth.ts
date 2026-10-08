@@ -21,6 +21,7 @@ type BackendAuthedResult<TData> = {
 type BackendAuthedOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
+  contentType?: string;
 };
 
 function getCookieValue(request: RouteRequest, cookieName: string) {
@@ -44,6 +45,7 @@ export async function fetchBackendWithAuth<TData>(
     fetchBackend<TData>(path, {
       method: options.method,
       body: options.body,
+      contentType: options.contentType,
       accessToken: token,
     });
 
@@ -155,7 +157,9 @@ export function applyBackendBinaryResult(
 ) {
   if (!result.body || result.status < 200 || result.status >= 300) {
     const response = NextResponse.json(
-      { success: false, message: "Compile output is not available.", data: null },
+      // Neutral wording: this helper now serves compile output and project
+      // exports, and "compile output" would be wrong for half of them.
+      { success: false, message: "That file is not available.", data: null },
       { status: result.status === 200 ? 404 : result.status }
     );
     if (result.shouldClearCookies) {

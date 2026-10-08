@@ -15,7 +15,7 @@ themselves they are not locked in.
 | **M2** | Export a project as a zip | ✅ |
 | **M3** | Import a zip as a new project | ✅ |
 | **M4** | Export from the editor UI | ✅ |
-| **M5** | Import from the dashboard UI | ⬜ |
+| **M5** | Import from the dashboard UI | ✅ |
 | **M6** | End-to-end: the round trip in a browser | ⬜ |
 
 Each milestone ships with its own tests. The e2e comes last, once there is a full path

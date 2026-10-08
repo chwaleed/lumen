@@ -19,13 +19,23 @@ type CreateProjectOptions = {
   templateId?: string;
 };
 
+type ImportedProject = {
+  project: BackendProject;
+  imported: string[];
+  skipped: string[];
+};
+
 type DashboardProjectsState = {
   projects: ProjectItem[];
   fetchStatus: FetchStatus;
   createStatus: CreateStatus;
   errorMessage: string | null;
+  // What the last import left behind: files in the zip we do not take. Held so
+  // the dashboard can say which ones, rather than silently dropping them.
+  skippedFiles: string[];
   ensureProjectsLoaded: () => Promise<void>;
   createProject: (options?: CreateProjectOptions) => Promise<string | null>;
+  importProject: (file: File) => Promise<string | null>;
 };
 
 function formatRelativeTime(dateString: string) {
@@ -84,6 +94,7 @@ export const useDashboardProjectsHook = create<DashboardProjectsState>()((set, g
   fetchStatus: "idle",
   createStatus: "idle",
   errorMessage: null,
+  skippedFiles: [],
   ensureProjectsLoaded: async () => {
     const { fetchStatus } = get();
     if (fetchStatus === "loading" || fetchStatus === "loaded") {
@@ -132,5 +143,41 @@ export const useDashboardProjectsHook = create<DashboardProjectsState>()((set, g
     }));
 
     return String(payload.data.id);
+  },
+  importProject: async (file: File) => {
+    set({ createStatus: "submitting", errorMessage: null, skippedFiles: [] });
+
+    // The File goes straight into the request body. FormData would mean a
+    // multipart parser on the backend for this one endpoint, and the zip is
+    // already exactly the bytes we want to send.
+    const { status, payload } = await requestApi<ImportedProject>(
+      `/api/projects/import?file_name=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        body: file,
+        headers: { "Content-Type": "application/zip" },
+      }
+    );
+
+    if (status < 200 || status >= 300 || !payload.success || !payload.data) {
+      set({
+        createStatus: "error",
+        // The backend's message names the actual problem -- a password, a
+        // traversal, a size -- and is more useful than anything generic.
+        errorMessage: payload.message ?? "That archive could not be imported.",
+      });
+      return null;
+    }
+
+    const imported = payload.data;
+    set((state) => ({
+      createStatus: "idle",
+      errorMessage: null,
+      fetchStatus: "loaded",
+      skippedFiles: imported.skipped,
+      projects: [mapProject(imported.project), ...state.projects],
+    }));
+
+    return String(imported.project.id);
   },
 }));
