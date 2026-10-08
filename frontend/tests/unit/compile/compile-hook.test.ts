@@ -5,9 +5,14 @@ import {
   respondWithApi,
   axiosRequest,
 } from "../support/axios-mock";
-import { POLL_BACKOFF_MS, useCompileHook } from "@/app/project/[id]/use-compile-hook";
+import {
+  POLL_BACKOFF_MS,
+  POLL_DEADLINE_MS,
+  useCompileHook,
+} from "@/app/project/[id]/use-compile-hook";
 
 const ORIGINAL_BACKOFF = [...POLL_BACKOFF_MS];
+const ORIGINAL_DEADLINE = POLL_DEADLINE_MS.value;
 
 function job(overrides: Record<string, unknown> = {}) {
   return {
@@ -29,6 +34,7 @@ describe("useCompileHook", () => {
     useCompileHook.getState().reset();
     // Keep the suite fast: the real backoff starts at 400ms.
     POLL_BACKOFF_MS.splice(0, POLL_BACKOFF_MS.length, ...ORIGINAL_BACKOFF.map(() => 1));
+    POLL_DEADLINE_MS.value = ORIGINAL_DEADLINE;
   });
 
   it("polls a queued job through to success", async () => {
@@ -202,5 +208,73 @@ describe("useCompileHook", () => {
   it("does nothing when there is no job to cancel", async () => {
     await useCompileHook.getState().cancel("1");
     expect(axiosRequest.mock.calls.length).toBe(0);
+  });
+
+  it("gives up rather than polling a never-ending build for ever", async () => {
+    // The loop had no deadline at all: a job that never reached a terminal
+    // state span the spinner until the tab was closed.
+    POLL_DEADLINE_MS.value = 0;
+    respondInOrderWithApi([
+      { status: 202, success: true, data: job({ status: "queued" }) },
+      { status: 200, success: true, data: job({ status: "running" }) },
+    ]);
+
+    await useCompileHook.getState().compile("1");
+
+    const state = useCompileHook.getState();
+    expect(state.status).toBe("failure");
+    expect(state.message).toContain("Gave up waiting");
+  });
+
+  it("rides out a dropped poll instead of failing the build", async () => {
+    // Wi-Fi blips and dev servers restart. One bad response used to throw
+    // away a compile that was running perfectly well.
+    respondInOrderWithApi([
+      { status: 202, success: true, data: job({ status: "queued" }) },
+      { status: 502, success: false, message: "Unable to reach the service." },
+      { status: 200, success: true, data: job({ status: "running" }) },
+      {
+        status: 200,
+        success: true,
+        data: job({ status: "success", has_pdf: true, duration_ms: 900 }),
+      },
+    ]);
+
+    await useCompileHook.getState().compile("1");
+
+    expect(useCompileHook.getState().status).toBe("success");
+  });
+
+  it("stops at once when the job is gone", async () => {
+    // A 404 is final; retrying it just delays the bad news.
+    respondInOrderWithApi([
+      { status: 202, success: true, data: job({ status: "queued" }) },
+      { status: 404, success: false, message: "Compile job not found." },
+    ]);
+
+    await useCompileHook.getState().compile("1");
+
+    const state = useCompileHook.getState();
+    expect(state.status).toBe("failure");
+    expect(state.message).toContain("not found");
+  });
+
+  it("surfaces the server's reason for a failure", async () => {
+    respondInOrderWithApi([
+      { status: 202, success: true, data: job({ status: "queued" }) },
+      {
+        status: 200,
+        success: true,
+        data: job({
+          status: "failure",
+          failure_reason: "No compile worker picked this up.",
+        }),
+      },
+      { status: 200, success: true, data: { log: "", errors: [], warnings: [] } },
+    ]);
+
+    await useCompileHook.getState().compile("1");
+
+    expect(useCompileHook.getState().message).toBe("No compile worker picked this up.");
   });
 });
