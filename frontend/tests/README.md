@@ -71,6 +71,20 @@ That makes the fast local loop possible (`test:e2e:local` excludes them) and let
 the full set once Postgres and the API are up. Default to writing tests that do **not**
 need the backend; reach for `@backend` only when the assertion is about real API behaviour.
 
+## The `@worker` tag
+
+A compile is heavier than an API call: it needs the compile worker running **and** the
+8 GB TeX Live image on the host. `@worker` marks the tests that drive a real `.tex`
+through to a real PDF, and both `test:e2e` and `test:e2e:local` exclude them.
+
+```bash
+bun run test:e2e:worker    # the real thing; see docs/plans/latex-compilation.md
+```
+
+Everything else about compilation is tested with the compile endpoints stubbed via
+`page.route`, which still exercises the store, the polling, the preview panes and the
+PDF iframe — just not TeX.
+
 ## Screenshots as proof
 
 Import `test` from `../support/test-base` rather than `@playwright/test` and take named

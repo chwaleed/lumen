@@ -11,8 +11,9 @@
     "test": "bun run test:unit && bun run test:e2e",
     "test:unit": "bun test",
     "test:unit:watch": "bun test --watch",
-    "test:e2e": "playwright test",
-    "test:e2e:local": "playwright test --grep-invert @backend",
+    "test:e2e": "playwright test --grep-invert @worker",
+    "test:e2e:local": "playwright test --grep-invert \"@backend|@worker\"",
+    "test:e2e:worker": "playwright test --grep @worker",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report tests/artifacts/report"
   },
