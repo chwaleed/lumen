@@ -60,6 +60,8 @@ describe("allowlist drift", () => {
     const backend = [...block.matchAll(/"(\.[a-z0-9]+)":/g)].map((match) => match[1]).sort();
 
     expect(backend.length).toBeGreaterThan(0);
-    expect([...UPLOADABLE_EXTENSIONS].sort()).toEqual(backend);
+    // Widened: the constant is a readonly tuple of literals, and toEqual will
+    // not match that against the plain strings scraped out of the backend.
+    expect([...UPLOADABLE_EXTENSIONS].sort() as string[]).toEqual(backend);
   });
 });
