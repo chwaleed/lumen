@@ -437,6 +437,16 @@ def settle_job(session: Session, job: CompileJob, settings: Settings) -> Compile
     return job
 
 
+def latest_job_for_project(session: Session, project: Project) -> CompileJob | None:
+    """The project's newest compile, whatever became of it."""
+    return session.exec(
+        select(CompileJob)
+        .where(CompileJob.project_id == project.id)
+        .order_by(CompileJob.id.desc())
+        .limit(1)
+    ).first()
+
+
 def reap_stale_jobs(session: Session, settings: Settings) -> int:
     """Settle every job that has outlived its allowance.
 

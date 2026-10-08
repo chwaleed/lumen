@@ -7,6 +7,7 @@ import { ActivityBar } from "@/app/project/[id]/components/activity-bar";
 import { EditorTopBar } from "@/app/project/[id]/components/editor-top-bar";
 import { PreviewPanel } from "@/app/project/[id]/components/preview-panel";
 import { StatusBar } from "@/app/project/[id]/components/status-bar";
+import { useCompileHook } from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { EditorPanel } from "./editor-panel";
 import { useEditorMount } from "./use-editor-mount";
@@ -50,6 +51,8 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
   const moveEntry = useProjectEditorHook((state) => state.moveEntry);
   const deleteEntry = useProjectEditorHook((state) => state.deleteEntry);
 
+  const restoreLatestCompile = useCompileHook((state) => state.restoreLatest);
+
   const selection = useEditorSelection();
   const handleEditorMount = useEditorMount({
     onClearSelection: selection.clear,
@@ -59,7 +62,10 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
 
   useEffect(() => {
     void loadProject(projectId);
-  }, [loadProject, projectId]);
+    // Pick up whatever this project last built, so a reload does not throw
+    // the PDF away and claim the project has never been compiled.
+    void restoreLatestCompile(projectId);
+  }, [loadProject, restoreLatestCompile, projectId]);
 
   const activeFile = useMemo(
     () => openFiles.find((file) => file.id === activeFileId) ?? null,

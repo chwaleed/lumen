@@ -19,6 +19,7 @@ from src.compiles.service import (
     create_job,
     ensure_project_fits,
     get_job_for_project,
+    latest_job_for_project,
     output_path,
     settle_job,
     queue_stats,
@@ -87,6 +88,28 @@ def post_compile(
 
     job = create_job(session, project, root_file_id=root_file_id)
     return ApiResponseBuilder.success(data=_serialize(job), message="Compile queued.")
+
+
+# Declared before the {job_id} route: that one parses its segment as an int,
+# so "latest" would 422 before ever reaching here.
+@router.get("/{project_id}/compile/latest", response_model=ApiResponse)
+def get_latest_compile(
+    project_id: int,
+    current_user: CurrentUser,
+    session: DbSession,
+    settings: AppSettings,
+) -> ApiResponse:
+    """The project's most recent compile, or nothing if it has never built.
+
+    Without this a reload forgot the build entirely: the PDF vanished and the
+    page claimed the project had never been compiled.
+    """
+    project = get_project_for_user(session, current_user, project_id)
+    job = latest_job_for_project(session, project)
+    if job is None:
+        return ApiResponseBuilder.success(data=None, message="No compile yet.")
+    job = settle_job(session, job, settings)
+    return ApiResponseBuilder.success(data=_serialize(job), message="Latest compile.")
 
 
 @router.get("/{project_id}/compile/{job_id}", response_model=ApiResponse)

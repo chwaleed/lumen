@@ -277,4 +277,56 @@ describe("useCompileHook", () => {
 
     expect(useCompileHook.getState().message).toBe("No compile worker picked this up.");
   });
+
+  describe("restoreLatest", () => {
+    it("picks up a finished build so a reload does not lose the PDF", async () => {
+      respondWithApi(200, {
+        success: true,
+        data: job({ status: "success", has_pdf: true, duration_ms: 812 }),
+      });
+
+      await useCompileHook.getState().restoreLatest("1");
+
+      const state = useCompileHook.getState();
+      expect(state.status).toBe("success");
+      expect(state.jobId).toBe(7);
+      expect(state.hasPdf).toBe(true);
+      expect(state.durationMs).toBe(812);
+    });
+
+    it("does nothing when the project has never been compiled", async () => {
+      respondWithApi(200, { success: true, data: null });
+
+      await useCompileHook.getState().restoreLatest("1");
+
+      expect(useCompileHook.getState().status).toBe("idle");
+      expect(useCompileHook.getState().jobId).toBeNull();
+    });
+
+    it("resumes polling a build that is still running", async () => {
+      respondInOrderWithApi([
+        { status: 200, success: true, data: job({ status: "running" }) },
+        {
+          status: 200,
+          success: true,
+          data: job({ status: "success", has_pdf: true }),
+        },
+      ]);
+
+      await useCompileHook.getState().restoreLatest("1");
+
+      expect(useCompileHook.getState().status).toBe("success");
+    });
+
+    it("leaves a compile started in this tab alone", async () => {
+      // Mount order is not guaranteed; restoring over a live build would
+      // reset the UI to whatever finished last.
+      useCompileHook.setState({ status: "running", jobId: 99 });
+
+      await useCompileHook.getState().restoreLatest("1");
+
+      expect(useCompileHook.getState().jobId).toBe(99);
+      expect(axiosRequest).not.toHaveBeenCalled();
+    });
+  });
 });

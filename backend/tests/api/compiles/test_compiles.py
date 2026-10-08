@@ -252,6 +252,46 @@ class TestReadCompile:
         assert data["log"].startswith("./main.tex:4:")
 
 
+class TestLatestCompile:
+    """A reload has to be able to find the build that already happened."""
+
+    def test_is_null_before_the_first_compile(self, api: TestClient) -> None:
+        h = _auth(api, "latest-none@example.com")
+        project_id = _new_project(api, h)
+
+        response = api.get(f"/projects/{project_id}/compile/latest", headers=h)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"] is None
+
+    def test_returns_the_newest_job(self, api: TestClient) -> None:
+        h = _auth(api, "latest-newest@example.com")
+        project_id = _new_project(api, h)
+        _queue(api, h, project_id)
+        second = _queue(api, h, project_id)
+
+        response = api.get(f"/projects/{project_id}/compile/latest", headers=h)
+
+        assert response.json()["data"]["id"] == second
+
+    def test_latest_is_not_mistaken_for_a_job_id(self, api: TestClient) -> None:
+        # The {job_id} route parses its segment as an int, so declaration
+        # order is what keeps "latest" from 422-ing.
+        h = _auth(api, "latest-route@example.com")
+        project_id = _new_project(api, h)
+
+        assert api.get(f"/projects/{project_id}/compile/latest", headers=h).status_code == 200
+
+    def test_another_users_project_is_404(self, api: TestClient) -> None:
+        owner = _auth(api, "latest-mine@example.com")
+        project_id = _new_project(api, owner)
+        stranger = _auth(api, "latest-stranger@example.com")
+
+        response = api.get(f"/projects/{project_id}/compile/latest", headers=stranger)
+
+        assert response.status_code == 404, response.text
+
+
 class TestCancelCompile:
     def test_a_queued_job_can_be_cancelled(self, api: TestClient) -> None:
         h = _auth(api, "cancel@example.com")

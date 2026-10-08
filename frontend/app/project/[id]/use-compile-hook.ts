@@ -83,6 +83,8 @@ type CompileState = {
   // when there is one, the problem list when the build failed.
   view: PreviewView | null;
   compile: (projectId: string) => Promise<void>;
+  restoreLatest: (projectId: string) => Promise<void>;
+  resume: (projectId: string, jobId: number) => Promise<void>;
   cancel: (projectId: string) => Promise<void>;
   loadLog: (projectId: string) => Promise<void>;
   setView: (view: PreviewView | null) => void;
@@ -100,6 +102,44 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
   errors: [],
   warnings: [],
   view: null,
+
+  /**
+   * Pick up the project's most recent compile when the editor opens.
+   *
+   * A reload used to forget the build entirely -- the PDF vanished and the
+   * pane claimed the project had never been compiled. A build still running
+   * is resumed rather than abandoned.
+   */
+  restoreLatest: async (projectId: string) => {
+    if (get().status !== "idle" || get().jobId !== null) {
+      return;
+    }
+
+    const { payload } = await requestApi<CompileJob | null>(
+      `/api/projects/${projectId}/compile/latest`
+    );
+    const job = payload.data;
+    if (!payload.success || !job) {
+      return;
+    }
+
+    set({
+      jobId: job.id,
+      status: job.status,
+      errorCount: job.error_count,
+      durationMs: job.duration_ms,
+      hasPdf: job.has_pdf,
+      message: job.failure_reason,
+    });
+
+    if (!TERMINAL.includes(job.status)) {
+      await get().resume(projectId, job.id);
+      return;
+    }
+    if (job.status !== "success" && job.has_log) {
+      await get().loadLog(projectId);
+    }
+  },
 
   compile: async (projectId: string) => {
     const current = get().status;
@@ -130,6 +170,17 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
     const jobId = payload.data.id;
     set({ jobId, status: payload.data.status });
 
+    await get().resume(projectId, jobId);
+  },
+
+  /**
+   * Poll a job that is already running until it settles.
+   *
+   * Shared by `compile` and `restoreLatest`, so a build picked up after a
+   * reload gets the same deadline and the same tolerance for a dropped
+   * request as one started in this tab.
+   */
+  resume: async (projectId: string, jobId: number) => {
     const deadline = Date.now() + POLL_DEADLINE_MS.value;
     let consecutiveFailures = 0;
 
