@@ -16,10 +16,39 @@ import { expect, test } from "../support/test-base";
 
 const JOB_ID = 4242;
 
-// Enough to be served as application/pdf. These tests assert on headers,
-// the iframe and the absence of a download -- not on rendered glyphs -- so a
-// byte-accurate document would buy nothing.
-const FAKE_PDF = Buffer.from("%PDF-1.7\n%fake compile output\n%%EOF\n");
+/**
+ * A valid single-page PDF, built here rather than committed as a fixture.
+ *
+ * It has to be genuinely valid now: the viewer parses it with pdf.js, which
+ * refuses a stub of the "%PDF-1.7 ... %%EOF" sort the iframe viewer used to
+ * accept. Offsets are computed because the xref table has to point at the
+ * real byte positions.
+ */
+function minimalPdf(): Buffer {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> >>",
+  ];
+
+  let body = "%PDF-1.7\n";
+  const offsets: number[] = [];
+  objects.forEach((object, index) => {
+    offsets.push(body.length);
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefStart = body.length;
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    body += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+
+  return Buffer.from(body, "latin1");
+}
+
+const FAKE_PDF = minimalPdf();
 
 function envelope(data: unknown, message = "ok") {
   return JSON.stringify({ success: true, message, data });
@@ -58,7 +87,8 @@ async function stubCompile(
 
     if (url.pathname.endsWith("/pdf")) {
       // Mirrors what the route handler really sends: a content type and no
-      // content-disposition, so the browser renders rather than saves.
+      // content-disposition. pdf.js fetches these bytes itself, so a browser
+      // download can only happen if something is badly wrong.
       return route.fulfill({
         status: 200,
         contentType: "application/pdf",
@@ -145,7 +175,7 @@ test.describe("compile preview @backend", () => {
     await openProject(page, projectId);
 
     await expect(page.getByText("No preview yet")).toBeVisible();
-    await expect(page.locator('iframe[title="Compiled PDF preview"]')).toHaveCount(0);
+    await expect(page.getByLabel("Compiled PDF preview")).toHaveCount(0);
     await proof("preview before compiling");
   });
 
@@ -159,7 +189,7 @@ test.describe("compile preview @backend", () => {
     await openProject(page, projectId);
     await compileButton(page).click();
 
-    const viewer = page.locator('iframe[title="Compiled PDF preview"]');
+    const viewer = page.getByLabel("Compiled PDF preview");
     await expect(viewer).toBeVisible();
     await expect(page.getByText(/Compiled in/)).toBeVisible();
 
@@ -169,21 +199,49 @@ test.describe("compile preview @backend", () => {
     await proof("compiled PDF in the preview");
   });
 
-  test("asks the viewer to hide the thumbnail sidebar", async ({ page }) => {
+  test("keeps the compile controls in the top bar, not above the preview", async ({
+    page,
+    proof,
+  }) => {
+    await stubCompile(page);
+
+    await openProject(page, projectId);
+    await compileButton(page).click();
+    await expect(page.getByLabel("Compiled PDF preview")).toBeVisible();
+
+    // The preview pane is content only. A header strip here cost the PDF ~40px
+    // of height and repeated a Compile button that already exists above.
+    const header = page.locator("header");
+    await expect(header.getByText(/Compiled in/)).toBeVisible();
+    await expect(page.getByText("Preview", { exact: true })).toHaveCount(0);
+
+    // One Compile button in the whole page, not two.
+    await expect(page.getByRole("button", { name: "Compile", exact: true })).toHaveCount(1);
+
+    // No PDF chip: the PDF is the default view, so the chip would be lit
+    // almost always and do nothing when pressed.
+    await expect(page.getByRole("button", { name: "PDF", exact: true })).toHaveCount(0);
+    await proof("compile controls in the top bar");
+  });
+
+  test("renders the pages itself, with our own toolbar", async ({ page, proof }) => {
     await stubCompile(page);
 
     await openProject(page, projectId);
     await compileButton(page).click();
 
-    const viewer = page.locator('iframe[title="Compiled PDF preview"]');
+    const viewer = page.getByLabel("Compiled PDF preview");
     await expect(viewer).toBeVisible();
 
-    // The sidebar is Chrome's, not ours, so the fragment is the only handle on
-    // it -- and it is what keeps the page readable in a third-width pane.
-    const src = await viewer.getAttribute("src");
-    expect(src).toContain(`/api/projects/${projectId}/compile/${JOB_ID}/pdf`);
-    expect(src).toContain("navpanes=0");
-    expect(src).toContain("view=FitH");
+    // Chrome's viewer gave us a toolbar we could neither restyle nor drive,
+    // and it cost ~40px of a pane that is only a third of the window.
+    await expect(viewer.getByText("1 / 1")).toBeVisible();
+    await expect(viewer.getByRole("button", { name: "Fit to width" })).toBeVisible();
+    await expect(viewer.getByRole("button", { name: "Zoom in" })).toBeVisible();
+
+    // A real canvas, drawn by pdf.js -- not a plugin we have no control over.
+    await expect(viewer.locator("canvas")).toHaveCount(1);
+    await proof("pdf rendered by pdf.js");
   });
 
   test("offers the PDF for export under the project's name", async ({ page }) => {
@@ -191,7 +249,7 @@ test.describe("compile preview @backend", () => {
 
     await openProject(page, projectId);
     await compileButton(page).click();
-    await expect(page.locator('iframe[title="Compiled PDF preview"]')).toBeVisible();
+    await expect(page.getByLabel("Compiled PDF preview")).toBeVisible();
 
     const exportLink = page.getByRole("link", { name: "Export PDF" });
     await expect(exportLink).toHaveAttribute("download", "Compile Project.pdf");
@@ -222,11 +280,14 @@ test.describe("compile preview @backend", () => {
     await openProject(page, projectId);
     await compileButton(page).click();
 
+    // The problem count is a toggle in the top bar; the pane follows the
+    // failed compile on its own, with no click needed.
+    await expect(page.locator("header").getByRole("button", { name: "1" })).toBeVisible();
     await expect(page.getByText("Undefined control sequence \\foo")).toBeVisible();
     // The file:line the diagnostic carries, not the sidebar entry or the tab,
     // both of which also say "main.tex".
     await expect(page.getByText("main.tex:12")).toBeVisible();
-    await expect(page.locator('iframe[title="Compiled PDF preview"]')).toHaveCount(0);
+    await expect(page.getByLabel("Compiled PDF preview")).toHaveCount(0);
     await proof("compile errors in the preview");
   });
 });
@@ -244,20 +305,16 @@ test.describe("real compilation @backend @worker", () => {
     await openProject(page, projectId);
     await compileButton(page).click();
 
-    const viewer = page.locator('iframe[title="Compiled PDF preview"]');
+    const viewer = page.getByLabel("Compiled PDF preview");
     await expect(viewer).toBeVisible({ timeout: 150_000 });
     await expect(page.getByText(/Compiled in/)).toBeVisible();
     expect(saved).toEqual([]);
 
-    // The bytes behind the iframe are a real PDF, not an error page.
-    const src = (await viewer.getAttribute("src")) ?? "";
-    const pdf = await page.request.get(src.split("#")[0]);
-    expect(pdf.status()).toBe(200);
-    expect(pdf.headers()["content-type"]).toContain("application/pdf");
-    // Whatever disposition reaches the browser must not be an attachment, or
-    // the iframe above would have been a download instead of a preview.
-    expect(pdf.headers()["content-disposition"] ?? "").not.toContain("attachment");
-    expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+    // pdf.js parsed real compiler output and painted a page. Nothing a stub or
+    // an error page could produce -- and the inline Content-Disposition this
+    // depends on has its own test in backend/tests/api/compiles/.
+    await expect(viewer.locator("canvas").first()).toBeVisible();
+    await expect(viewer.getByText(/^\d+ \/ \d+$/)).toBeVisible();
 
     await proof("real compiled PDF");
   });

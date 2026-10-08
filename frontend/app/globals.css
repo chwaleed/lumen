@@ -341,3 +341,44 @@
     opacity: 0.45;
   }
 }
+
+/* pdf.js text layer.
+   Invisible text positioned over the rendered canvas. It is what makes the
+   PDF selectable and what lets the browser's own Ctrl+F search it, which is
+   why the viewer's toolbar has no search box of its own. pdf.js sets each
+   span's position from --scale-factor, which the page component supplies. */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  opacity: 1;
+  z-index: 2;
+}
+
+.pdf-text-layer span,
+.pdf-text-layer br {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+  transform-origin: 0% 0%;
+  margin: 0;
+}
+
+.pdf-text-layer ::selection {
+  background: color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+/* pdf.js measures glyph widths against this hidden element. */
+.pdf-text-layer .endOfContent {
+  position: absolute;
+  inset: 100% 0 0;
+  display: block;
+  cursor: default;
+  user-select: none;
+}
