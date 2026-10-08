@@ -437,6 +437,36 @@ def settle_job(session: Session, job: CompileJob, settings: Settings) -> Compile
     return job
 
 
+def read_log_text(path: Path, max_bytes: int) -> str:
+    """A compile log, bounded.
+
+    A runaway document can emit a log far larger than anything anyone would
+    read; sending it whole exhausts the API and then the browser. Both ends
+    are kept because the errors are usually early and the summary is always
+    last -- it is the middle nobody needs.
+    """
+    size = path.stat().st_size
+    if size <= max_bytes:
+        return path.read_text(encoding="utf-8", errors="replace")
+
+    half = max_bytes // 2
+    with path.open("rb") as handle:
+        head = handle.read(half)
+        handle.seek(-half, 2)
+        tail = handle.read()
+
+    dropped = size - len(head) - len(tail)
+    marker = (
+        f"\n\n... {dropped:,} bytes of this log were dropped: it is "
+        f"{size:,} bytes, far past the {max_bytes:,} this viewer will load ...\n\n"
+    )
+    return (
+        head.decode("utf-8", errors="replace")
+        + marker
+        + tail.decode("utf-8", errors="replace")
+    )
+
+
 def latest_job_for_project(session: Session, project: Project) -> CompileJob | None:
     """The project's newest compile, whatever became of it."""
     return session.exec(

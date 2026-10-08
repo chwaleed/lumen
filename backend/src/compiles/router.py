@@ -21,6 +21,7 @@ from src.compiles.service import (
     get_job_for_project,
     latest_job_for_project,
     output_path,
+    read_log_text,
     settle_job,
     queue_stats,
     snapshot_storage_stats,
@@ -143,7 +144,7 @@ def get_compile_log(
     if job.log_path:
         path = output_path(settings, job.log_path)
         if path.exists():
-            log_text = path.read_text(encoding="utf-8", errors="replace")
+            log_text = read_log_text(path, settings.compile_log_max_bytes)
 
     # Parsed on read rather than stored: the log is the source of truth, and
     # improving the parser should improve old jobs too, without a migration.

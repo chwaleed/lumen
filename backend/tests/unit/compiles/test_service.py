@@ -237,6 +237,43 @@ def _settings(*, timeout_seconds: int, queue_seconds: int = 10_000) -> Settings:
     )
 
 
+class TestReadLogText:
+    """A log has to be bounded before it reaches memory, then a browser."""
+
+    def test_a_small_log_is_returned_whole(self, tmp_path: Path) -> None:
+        from src.compiles.service import read_log_text
+
+        log = tmp_path / "small.log"
+        log.write_text("every line matters\n" * 10)
+
+        assert read_log_text(log, 1_000_000) == log.read_text()
+
+    def test_a_huge_log_keeps_both_ends(self, tmp_path: Path) -> None:
+        # M0 produced a 186 MB log from a runaway document. Sending that whole
+        # exhausts the API and then kills the tab it is sent to.
+        from src.compiles.service import read_log_text
+
+        log = tmp_path / "huge.log"
+        log.write_text("START-MARKER\n" + ("filler\n" * 200_000) + "END-MARKER\n")
+
+        text = read_log_text(log, 4096)
+
+        assert len(text) < 10_000
+        assert "START-MARKER" in text
+        assert "END-MARKER" in text
+        # And it says so, rather than silently serving a truncated log.
+        assert "were dropped" in text
+
+    def test_invalid_utf8_does_not_raise(self, tmp_path: Path) -> None:
+        # Fonts and encodings put arbitrary bytes in a TeX log.
+        from src.compiles.service import read_log_text
+
+        log = tmp_path / "bytes.log"
+        log.write_bytes(b"ok \xff\xfe bad bytes\n" + b"x" * 9000)
+
+        assert "ok" in read_log_text(log, 4096)
+
+
 class TestSettleJob:
     """A polled job must always reach a terminal state.
 

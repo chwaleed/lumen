@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     compile_queue_timeout_seconds: int = Field(
         default=120, alias="COMPILE_QUEUE_TIMEOUT_SECONDS"
     )
+    # A runaway document can emit a colossal log -- M0 produced a 186 MB one.
+    # Reading it whole would exhaust the API's memory and then kill the tab it
+    # was sent to, so the middle is dropped instead.
+    compile_log_max_bytes: int = Field(
+        default=2 * 1024 * 1024, alias="COMPILE_LOG_MAX_BYTES"
+    )
     compile_cpus: str = Field(default="1", alias="COMPILE_CPUS")
     compile_memory: str = Field(default="1g", alias="COMPILE_MEMORY")
     compile_poll_seconds: float = Field(default=2.0, alias="COMPILE_POLL_SECONDS")
