@@ -523,10 +523,11 @@ submission, the superseded-job guard, cancellation, and a refused cancellation.
 The shared `axios-mock` gained `respondInOrder` / `respondInOrderWithApi`, because a flow that
 POSTs and then polls needs a sequence rather than one queued response.
 
-> **Gap, stated plainly: no e2e test for this yet.** `frontend/tests/e2e/compile/` would need
-> the backend, a running worker and Docker all up, which is a `@backend`-tagged test this
-> milestone did not stand up. Writing one that cannot be verified would be worse than
-> recording the gap.
+> ~~**Gap, stated plainly: no e2e test for this yet.**~~ **Closed 2026-10-08** by the
+> post-Phase-1 audit: `frontend/tests/e2e/compile/compile.spec.ts` drives the real UI.
+> Five `@backend` tests stub the compile endpoints in the browser, and one `@worker` test
+> compiles a real project and asserts a real PDF renders. See "Audit" below — writing it
+> found three defects.
 
 ## ✅ M5 — Parsed errors and navigation — **DONE (2026-10-08)**
 
@@ -808,6 +809,43 @@ frontend/tests/e2e/compile/      submit → PDF appears; broken doc → clickabl
 - E2E specs capture screenshots via the `proof` fixture per
   [ADR 0005](../decisions/0005-screenshots-as-e2e-proof.md)
 - Compiler tests must not use the SQLite fallback — schemas drift from Postgres
+
+---
+
+## Audit — 2026-10-08, after Phase 1
+
+Driven by one question: does compilation work, and is the PDF *displayed* rather than
+downloaded? Checked by compiling through the real API and then watching it in Chrome.
+
+**It works.** Signup → project → save → compile → PDF took 1,964 ms end to end, exit 0,
+and the PDF renders inline in the preview pane. Screenshot proof is in the e2e artifacts.
+
+### Defects found and fixed
+
+| | Found | Fixed in |
+|---|---|---|
+| **The API told browsers to download the PDF** | `FileResponse(..., filename=…)` sets `Content-Disposition: attachment` by default. The preview only worked because the Next proxy forwards `content-type` and drops the rest — any direct API consumer got a download | `268bd16` |
+| **The thumbnail sidebar ate the preview** | Chrome's page-list took most of a third-width pane, leaving the page at 57% zoom and unreadable. `navpanes=0&view=FitH` → 80% | `cf49dd3` |
+| **Export saved a file called `pdf`** | A bare `download` attribute falls back to the URL's last segment, and the proxy sends no filename — so the export had no extension | `b0e0ce9` |
+
+The first and third are the same root cause seen from both ends: the disposition header is
+the only thing that carries a filename, and the proxy drops it. The preview now gets
+`inline` from the API, and the export names the file client-side.
+
+### Still open
+
+- **A reload loses the preview.** The last successful compile is not restored — the page
+  shows "No preview yet" until you compile again. There is no "latest job for this project"
+  endpoint; `GET /projects/{id}/compile/{job_id}` needs an id the client no longer has.
+- **The proxy buffers the whole PDF and strips `Accept-Ranges`.** Fine for a 98 KB article;
+  a 200-page thesis is re-sent in full on every view, and the viewer cannot page-load it.
+- **The worker is not in compose, and nothing says so.** `docker compose up -d` yields an
+  app whose Compile button spins forever. Documented in CLAUDE.md rather than fixed:
+  containerising the worker means mounting the Docker socket *and* keeping its bind-mount
+  paths identical to the host's, since the daemon resolves them host-side.
+- **Headless Chromium has no PDF viewer** and downloads every `application/pdf`. The e2e
+  config now pins Chrome's new headless mode; worth knowing before debugging a "download"
+  that only happens in CI.
 
 ---
 
