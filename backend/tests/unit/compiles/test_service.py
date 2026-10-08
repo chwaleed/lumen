@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -209,7 +210,7 @@ class TestQueue:
         compile_session.add(job)
         compile_session.commit()
 
-        assert reap_stale_jobs(compile_session, timeout_seconds=60) == 1
+        assert reap_stale_jobs(compile_session, _settings(timeout_seconds=60)) == 1
         compile_session.refresh(job)
         assert job.status == "failure"
         assert job.finished_at is not None
@@ -222,9 +223,106 @@ class TestQueue:
         compile_session.add(job)
         compile_session.commit()
 
-        assert reap_stale_jobs(compile_session, timeout_seconds=300) == 0
+        assert reap_stale_jobs(compile_session, _settings(timeout_seconds=300)) == 0
         compile_session.refresh(job)
         assert job.status == STATUS_RUNNING
+
+
+def _settings(*, timeout_seconds: int, queue_seconds: int = 10_000) -> Settings:
+    """Settings for the reaper; the queue deadline defaults to never firing."""
+    return Settings(
+        database_url="sqlite:///:memory:",
+        compile_timeout_seconds=timeout_seconds,
+        compile_queue_timeout_seconds=queue_seconds,
+    )
+
+
+class TestSettleJob:
+    """A polled job must always reach a terminal state.
+
+    The worker is the only thing that reaps, so with no worker running a job
+    stayed `queued` for ever and the UI span a spinner indefinitely.
+    """
+
+    def test_an_unclaimed_job_is_failed_with_a_reason(self, compile_session: Session) -> None:
+        from src.compiles.service import settle_job
+
+        project = _project(compile_session)
+        job = create_job(compile_session, project)
+        job.created_at = utc_now() - timedelta(seconds=600)
+        compile_session.add(job)
+        compile_session.commit()
+
+        settled = settle_job(
+            compile_session, job, _settings(timeout_seconds=300, queue_seconds=120)
+        )
+
+        assert settled.status == "failure"
+        assert "worker" in settled.failure_reason
+        assert settled.finished_at is not None
+
+    def test_a_freshly_queued_job_is_left_alone(self, compile_session: Session) -> None:
+        from src.compiles.service import settle_job
+
+        project = _project(compile_session)
+        job = create_job(compile_session, project)
+
+        settled = settle_job(
+            compile_session, job, _settings(timeout_seconds=300, queue_seconds=120)
+        )
+
+        assert settled.status == STATUS_QUEUED
+
+    def test_a_job_whose_worker_died_is_failed_not_timed_out(
+        self, compile_session: Session
+    ) -> None:
+        # "Timed out" would send the user optimising a document that was fine.
+        from src.compiles.service import settle_job
+
+        project = _project(compile_session)
+        job = create_job(compile_session, project)
+        job.status = STATUS_RUNNING
+        job.started_at = utc_now() - timedelta(seconds=5000)
+        compile_session.add(job)
+        compile_session.commit()
+
+        settled = settle_job(compile_session, job, _settings(timeout_seconds=300))
+
+        assert settled.status == "failure"
+        assert "stopped responding" in settled.failure_reason
+
+    def test_a_finished_job_is_never_rewritten(self, compile_session: Session) -> None:
+        from src.compiles.models import STATUS_SUCCESS
+        from src.compiles.service import settle_job
+
+        project = _project(compile_session)
+        job = create_job(compile_session, project)
+        job.status = STATUS_SUCCESS
+        job.created_at = utc_now() - timedelta(seconds=99_999)
+        compile_session.add(job)
+        compile_session.commit()
+
+        settled = settle_job(compile_session, job, _settings(timeout_seconds=1))
+
+        assert settled.status == STATUS_SUCCESS
+        assert settled.failure_reason is None
+
+    def test_naive_timestamps_do_not_crash_the_poll_path(
+        self, compile_session: Session
+    ) -> None:
+        # SQLite hands back naive datetimes where Postgres hands back aware
+        # ones. Comparing the two raises, and this runs on every status poll.
+        from src.compiles.service import settle_job
+
+        project = _project(compile_session)
+        job = create_job(compile_session, project)
+        job.created_at = datetime(2020, 1, 1)  # naive, as SQLite would return
+        compile_session.add(job)
+        compile_session.commit()
+
+        settled = settle_job(compile_session, job, _settings(timeout_seconds=300))
+
+        assert settled.status == "failure"
 
 
 def _project_for(session: Session, user: User, name: str = "P") -> Project:

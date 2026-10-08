@@ -34,6 +34,12 @@ _BADBOX = re.compile(
 _ON_INPUT_LINE = re.compile(r"on input line (?P<line>\d+)")
 _TEX_LINE_MARKER = re.compile(r"^l\.(?P<line>\d+)")
 _CURRENT_FILE = re.compile(r"^<\*>\s+(?P<file>\S+)")
+# TeX echoes the offending line in two halves: everything it had read, then
+# the remainder on the next line, indented to where it stopped.
+_TEX_LINE_BODY = re.compile(r"^l\.\d+\s?(?P<before>.*)$")
+_TRAILING_MACRO = re.compile(r"(?P<macro>\\[A-Za-z@]+)\s*$")
+# Where TeX stopped reading, shown inline.
+_BREAK_MARKER = " ⟨?⟩ "
 _FILE_NOT_FOUND = re.compile(r"File `(?P<name>[^']+)' not found")
 
 # Lines that follow a real error rather than being one. Reporting these is how a
@@ -53,6 +59,9 @@ class Diagnostic:
     message: str
     file: str | None = None
     line: int | None = None
+    # The source TeX echoed back, split where it stopped reading. "Undefined
+    # control sequence." alone does not say *which* one; this does.
+    context: str | None = None
     # Not part of equality: two reports of the same fault are the same fault.
     raw: str = field(default="", compare=False)
 
@@ -62,6 +71,7 @@ class Diagnostic:
             "message": self.message,
             "file": self.file,
             "line": self.line,
+            "context": self.context,
         }
 
 
@@ -108,6 +118,31 @@ def _recover_location(lines: list[str], index: int) -> tuple[str | None, int | N
     return found_file, found_line
 
 
+def _tex_context(lines: list[str], index: int) -> tuple[str | None, str | None]:
+    """The echoed source around an error, and the macro it choked on.
+
+    TeX prints
+
+        l.4 Here is a \\badcommand
+                                  that does not exist.
+
+    so the token it could not handle is the last macro on the first half. That
+    is the single most useful fact about an "Undefined control sequence", and
+    the message by itself omits it.
+    """
+    for offset, candidate in enumerate(lines[index + 1 : index + 1 + _LOOKAHEAD]):
+        body = _TEX_LINE_BODY.match(candidate)
+        if not body:
+            continue
+        before = body.group("before").rstrip()
+        following = lines[index + 1 + offset + 1 : index + 1 + offset + 2]
+        after = following[0].strip() if following else ""
+        context = (before + _BREAK_MARKER + after).strip() if after else before.strip()
+        macro = _TRAILING_MACRO.search(before)
+        return (context or None, macro.group("macro") if macro else None)
+    return (None, None)
+
+
 def _find_in_sources(source_dir: Path, needle: str) -> tuple[str | None, int | None]:
     """Locate the line that asks for a missing file.
 
@@ -152,12 +187,18 @@ def parse_log(log_text: str, source_dir: Path | None = None) -> list[Diagnostic]
             )
             if inner and inner.group("severity") == "Info":
                 continue
+            context, macro = _tex_context(lines, index)
+            if macro and message.startswith("Undefined control sequence"):
+                # Name it. "Undefined control sequence." sends the user hunting
+                # along a line that may hold a dozen macros.
+                message = f"Undefined control sequence {macro}"
             diagnostics.append(
                 Diagnostic(
                     severity=severity,
                     message=message,
                     file=_normalise_file(match.group("file")),
                     line=int(match.group("line")),
+                    context=context,
                     raw=line,
                 )
             )

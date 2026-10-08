@@ -86,6 +86,16 @@ class CompileJob(SQLModel, table=True):
         default=None, sa_column=Column(String(128), nullable=True)
     )
 
+    # Why a job ended the way it did, when the log cannot say.
+    #
+    # A LaTeX error explains itself through the log; everything else -- no .tex
+    # to compile, an unreachable image, a worker killed mid-build, a job no
+    # worker ever claimed -- leaves the user staring at a red badge with no
+    # reason. This is that reason, in one sentence, meant to be read.
+    failure_reason: str | None = Field(
+        default=None, sa_column=Column(String(500), nullable=True)
+    )
+
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),

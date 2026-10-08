@@ -53,7 +53,10 @@ def run_job(session: Session, job: CompileJob, settings: Settings | None = None)
     settings = settings or get_settings()
     project = session.get(Project, job.project_id)
     if project is None:
-        return _finish(session, job, STATUS_FAILURE, exit_code=None, duration_ms=0)
+        return _finish(
+            session, job, STATUS_FAILURE, exit_code=None, duration_ms=0,
+            failure_reason="This project no longer exists.",
+        )
 
     work_dir = _work_dir(settings, project.id)
     started = time.monotonic()
@@ -70,9 +73,12 @@ def run_job(session: Session, job: CompileJob, settings: Settings | None = None)
         root_tex = resolve_root_tex(paths, root_path)
     except ProjectFilesError as exc:
         logger.warning("compile job %s could not be materialised: %s", job.id, exc)
+        # The one failure class with no log to read: the build never started.
+        # Without this the user gets a red badge and an empty problem list.
         return _finish(
             session, job, STATUS_FAILURE, exit_code=None,
             duration_ms=int((time.monotonic() - started) * 1000),
+            failure_reason=str(exc),
         )
 
     cache_dir = Path(settings.compile_cache_dir)
@@ -117,19 +123,54 @@ def run_job(session: Session, job: CompileJob, settings: Settings | None = None)
             encoding="utf-8", errors="replace"
         )
 
+    error_count = _count_errors(log_text, work_dir) if log_text else None
+
     if result.returncode == EXIT_TIMEOUT:
         status = STATUS_TIMEOUT
+        reason = (
+            f"The compile ran longer than {settings.compile_timeout_seconds} seconds "
+            "and was stopped. A runaway macro or an infinite loop is the usual cause."
+        )
     elif produced.get("pdf") and result.returncode == 0:
-        status = STATUS_SUCCESS
+        status, reason = STATUS_SUCCESS, None
     else:
         status = STATUS_FAILURE
+        reason = _failure_reason(result, log_text, error_count)
 
     return _finish(
         session, job, status,
         exit_code=result.returncode,
         duration_ms=duration_ms,
-        error_count=_count_errors(log_text, work_dir) if log_text else None,
+        error_count=error_count,
+        failure_reason=reason,
         **produced,
+    )
+
+
+def _failure_reason(
+    result: "subprocess.CompletedProcess[str]", log_text: str, error_count: int | None
+) -> str | None:
+    """Why a build failed, when the log alone will not tell the user.
+
+    None when the log already explains it -- the problem list is a better
+    answer than a sentence, and repeating it would just be noise.
+    """
+    if error_count:
+        return None
+
+    if not log_text:
+        # No log at all means TeX never ran: a missing image, a container that
+        # could not start, a disk that is full.
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        tail = detail[-1][:300] if detail else ""
+        return (
+            "The build service could not run this compile"
+            + (f": {tail}" if tail else ".")
+        )
+
+    return (
+        f"The compiler exited with code {result.returncode} but reported no errors "
+        "we could parse. The full log is under the Log tab."
     )
 
 
@@ -156,6 +197,7 @@ def _finish(
     exit_code: int | None,
     duration_ms: int,
     error_count: int | None = None,
+    failure_reason: str | None = None,
     pdf: str | None = None,
     log: str | None = None,
     synctex: str | None = None,
@@ -167,6 +209,7 @@ def _finish(
         job.status = status
     job.exit_code = exit_code
     job.duration_ms = duration_ms
+    job.failure_reason = failure_reason
     job.error_count = error_count
     job.pdf_path = pdf
     job.log_path = log
@@ -195,7 +238,7 @@ def main() -> None:  # pragma: no cover - process entrypoint
     while True:
         try:
             with Session(get_engine(settings)) as session:
-                reaped = reap_stale_jobs(session, settings.compile_timeout_seconds)
+                reaped = reap_stale_jobs(session, settings)
                 if reaped:
                     logger.warning("reaped %s stale job(s)", reaped)
             job = run_once(settings)

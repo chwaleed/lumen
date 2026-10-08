@@ -92,6 +92,12 @@ class Settings(BaseSettings):
         alias="COMPILE_CACHE_DIR",
     )
     compile_timeout_seconds: int = Field(default=300, alias="COMPILE_TIMEOUT_SECONDS")
+    # How long a job may sit unclaimed before the API declares that nothing is
+    # going to pick it up. Generous enough to ride out a busy queue, short
+    # enough that a stopped worker does not leave a spinner running for ever.
+    compile_queue_timeout_seconds: int = Field(
+        default=120, alias="COMPILE_QUEUE_TIMEOUT_SECONDS"
+    )
     compile_cpus: str = Field(default="1", alias="COMPILE_CPUS")
     compile_memory: str = Field(default="1g", alias="COMPILE_MEMORY")
     compile_poll_seconds: float = Field(default=2.0, alias="COMPILE_POLL_SECONDS")

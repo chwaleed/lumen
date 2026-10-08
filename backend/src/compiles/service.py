@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from datetime import datetime
+
 from sqlmodel import Session, func, select
 
 from src.compiles.models import (
@@ -357,30 +359,106 @@ def output_path(settings: Settings, relative: str) -> Path:
     return resolved
 
 
-def reap_stale_jobs(session: Session, timeout_seconds: int) -> int:
-    """Fail jobs whose worker died mid-compile.
+def _as_aware(value: "datetime") -> "datetime":
+    """UTC-aware, whatever the driver handed back.
 
-    Without this a crashed worker leaves a row stuck in `running` for ever. It is
-    also the wall-clock backstop: compile.sh kills its own container, but nothing
-    else would notice a worker that was killed between claiming and finishing.
+    Postgres returns aware datetimes for these columns and SQLite returns
+    naive ones. Comparing the two raises, and this runs on every status poll,
+    so getting it wrong means a 500 on the whole polling path.
+    """
+    from datetime import timezone
+
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _expiry(job: CompileJob, settings: Settings) -> tuple[str, str] | None:
+    """The status and reason a non-terminal job has outlived, if it has.
+
+    None while the job is still within its allowance.
     """
     from datetime import timedelta
 
     from src.compiles.models import STATUS_FAILURE
 
-    cutoff = utc_now() - timedelta(seconds=timeout_seconds * 2)
-    stale = list(
-        session.exec(
-            select(CompileJob).where(
-                CompileJob.status == STATUS_RUNNING,
-                CompileJob.started_at < cutoff,
+    now = utc_now()
+
+    if job.status == STATUS_QUEUED:
+        # Nothing claimed it. Either every worker is busy far past what the
+        # queue should hold, or none is running at all -- and from here those
+        # are indistinguishable, so the message has to cover both.
+        if _as_aware(job.created_at) < now - timedelta(seconds=settings.compile_queue_timeout_seconds):
+            return (
+                STATUS_FAILURE,
+                "No compile worker picked this up. The build service may be down; "
+                "try again shortly.",
             )
+        return None
+
+    if job.status == STATUS_RUNNING:
+        # compile.sh enforces its own wall clock inside the container, so a job
+        # still running past twice that means the worker itself died.
+        if job.started_at is None:
+            return None
+        if _as_aware(job.started_at) < now - timedelta(seconds=settings.compile_timeout_seconds * 2):
+            # Failure, not timeout. compile.sh enforces the real wall clock and
+            # reports STATUS_TIMEOUT itself; reaching here means the worker
+            # died mid-build, and calling that "timed out" would send the user
+            # off optimising a document that was never the problem.
+            return (
+                STATUS_FAILURE,
+                "The build service stopped responding and this compile was "
+                "abandoned. Nothing is wrong with your document -- try again.",
+            )
+        return None
+
+    return None
+
+
+def settle_job(session: Session, job: CompileJob, settings: Settings) -> CompileJob:
+    """Resolve a job that can no longer finish on its own.
+
+    Called when a job is *read*, not only from the worker loop, because the
+    case that matters most is the one where no worker is running at all:
+    nothing would ever reap it, the API would keep answering `queued`, and the
+    user would watch a spinner for ever.
+    """
+    if job.status in TERMINAL_STATUSES:
+        return job
+
+    expiry = _expiry(job, settings)
+    if expiry is None:
+        return job
+
+    job.status, job.failure_reason = expiry
+    job.finished_at = utc_now()
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def reap_stale_jobs(session: Session, settings: Settings) -> int:
+    """Settle every job that has outlived its allowance.
+
+    The worker calls this so abandoned rows do not accumulate; reads call
+    `settle_job`, which resolves one job even with no worker running.
+    """
+    candidates = list(
+        session.exec(
+            select(CompileJob).where(CompileJob.status.in_([STATUS_QUEUED, STATUS_RUNNING]))
         ).all()
     )
-    for job in stale:
-        job.status = STATUS_FAILURE
+
+    reaped = 0
+    for job in candidates:
+        expiry = _expiry(job, settings)
+        if expiry is None:
+            continue
+        job.status, job.failure_reason = expiry
         job.finished_at = utc_now()
         session.add(job)
-    if stale:
+        reaped += 1
+
+    if reaped:
         session.commit()
-    return len(stale)
+    return reaped

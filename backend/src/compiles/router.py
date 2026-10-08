@@ -20,6 +20,7 @@ from src.compiles.service import (
     ensure_project_fits,
     get_job_for_project,
     output_path,
+    settle_job,
     queue_stats,
     snapshot_storage_stats,
 )
@@ -49,6 +50,7 @@ def _serialize(job: CompileJob) -> dict:
         has_pdf=job.pdf_path is not None,
         has_log=job.log_path is not None,
         has_synctex=job.synctex_path is not None,
+        failure_reason=job.failure_reason,
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
@@ -93,9 +95,13 @@ def get_compile(
     job_id: int,
     current_user: CurrentUser,
     session: DbSession,
+    settings: AppSettings,
 ) -> ApiResponse:
     project = get_project_for_user(session, current_user, project_id)
     job = get_job_for_project(session, project, job_id)
+    # Resolved here rather than only in the worker: with no worker running,
+    # nothing else would ever move this off `queued`.
+    job = settle_job(session, job, settings)
     return ApiResponseBuilder.success(data=_serialize(job), message="Compile status.")
 
 

@@ -17,6 +17,9 @@ class CompileJobResponse(BaseModel):
     has_pdf: bool
     has_log: bool
     has_synctex: bool
+    # Set when the reason is not in the log: no .tex, a dead worker, a job
+    # nothing ever claimed.
+    failure_reason: str | None = None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -27,6 +30,8 @@ class CompileDiagnostic(BaseModel):
     message: str
     file: str | None
     line: int | None
+    # The source TeX echoed back, with the point it stopped reading marked.
+    context: str | None = None
 
 
 class CompileLogResponse(BaseModel):
