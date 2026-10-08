@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     upload_max_file_bytes: int = Field(default=25 * 1024 * 1024, alias="UPLOAD_MAX_FILE_BYTES")
     project_max_bytes: int = Field(default=200 * 1024 * 1024, alias="PROJECT_MAX_BYTES")
 
+    # Imported archives. The zip arrives whole in memory, so the compressed
+    # ceiling is the one that bounds a request; the uncompressed ceilings bound
+    # what a zip bomb can turn it into.
+    archive_max_bytes: int = Field(default=50 * 1024 * 1024, alias="ARCHIVE_MAX_BYTES")
+    archive_max_total_bytes: int = Field(
+        default=200 * 1024 * 1024, alias="ARCHIVE_MAX_TOTAL_BYTES"
+    )
+    archive_max_entries: int = Field(default=2000, alias="ARCHIVE_MAX_ENTRIES")
+
     # Compilation. The work directory is kept PER PROJECT, not per job: latexmk's
     # .aux/.fdb_latexmk surviving between compiles is what makes a rebuild ~7s
     # instead of ~36s. See docs/decisions/0010-one-compile-profile.md.
