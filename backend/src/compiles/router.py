@@ -164,7 +164,16 @@ def get_compile_pdf(
     if not path.exists():
         raise projects_exception("Compile output is no longer available.", status.HTTP_404_NOT_FOUND)
 
-    return FileResponse(path, media_type="application/pdf", filename=path.name)
+    # inline, not attachment: this endpoint feeds the preview iframe, and
+    # Starlette's default disposition would make the browser download the PDF
+    # instead of rendering it. Export is a separate, client-side concern -- the
+    # Export button sets its own `download` attribute on the same URL.
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=path.name,
+        content_disposition_type="inline",
+    )
 
 
 @router.delete("/{project_id}/compile/{job_id}", response_model=ApiResponse)
