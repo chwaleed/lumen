@@ -147,7 +147,11 @@ export async function fetchBackendBinaryWithAuth(
 
 export function applyBackendBinaryResult(
   request: RouteRequest,
-  result: BackendBinaryResult
+  result: BackendBinaryResult,
+  // Safe for compile output, whose job id is in the path and whose bytes never
+  // change. An export has no such id and changes with every edit, so it passes
+  // "no-store" instead.
+  cacheControl = "private, max-age=3600"
 ) {
   if (!result.body || result.status < 200 || result.status >= 300) {
     const response = NextResponse.json(
@@ -163,10 +167,8 @@ export function applyBackendBinaryResult(
   const response = new NextResponse(result.body, {
     status: result.status,
     headers: {
-      "Content-Type": result.contentType ?? "application/pdf",
-      // The job id is in the path and a finished job's output never changes, so
-      // the browser may keep it; a new compile is a new id.
-      "Cache-Control": "private, max-age=3600",
+      "Content-Type": result.contentType ?? "application/octet-stream",
+      "Cache-Control": cacheControl,
     },
   });
 

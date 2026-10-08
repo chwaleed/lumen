@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { exportBaseName } from "@/lib/projects";
 import { LATEX_SNIPPET_GROUPS } from "./latex-snippets";
 import { TooltipAction } from "./tooltip-action";
 
@@ -49,6 +50,8 @@ export function TopBarMenus() {
   const copySelection = useProjectEditorHook((state) => state.copySelection);
   const pasteSelection = useProjectEditorHook((state) => state.pasteSelection);
   const insertSnippet = useProjectEditorHook((state) => state.insertSnippet);
+  const projectId = useProjectEditorHook((state) => state.projectId);
+  const projectName = useProjectEditorHook((state) => state.projectName);
 
   const isDarkMode = theme === "dark";
 
@@ -66,6 +69,16 @@ export function TopBarMenus() {
           <DropdownMenuItem onClick={() => void saveActiveFile()}>
             Save
             <DropdownMenuShortcut>Ctrl+S</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {/* A link, not a fetch: the browser saves the bytes the proxy route
+              already streams, so a whole project never sits in a JS variable. */}
+          <DropdownMenuItem asChild disabled={!projectId}>
+            <a href={`/api/projects/${projectId}/export`} download={`${exportBaseName(projectName)}.zip`}>
+              Download as .zip
+            </a>
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </TopBarMenu>

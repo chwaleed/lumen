@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCompileHook } from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { useThemeStore } from "@/lib/stores/theme-store";
-import { pdfExportName } from "@/lib/projects";
+import { exportBaseName } from "@/lib/projects";
 import { PanelLayoutPopover } from "./panel-layout-popover";
 import { ProfileMenu } from "./profile-menu";
 import { TooltipAction } from "./tooltip-action";
@@ -33,7 +33,7 @@ export function EditorTopBar() {
   // An explicit filename: the route serves the PDF inline so the preview can
   // render it, which leaves a bare `download` to fall back on the URL's last
   // segment -- saving the file as "pdf", with no extension.
-  const pdfFileName = `${pdfExportName(projectName)}.pdf`;
+  const pdfFileName = `${exportBaseName(projectName)}.pdf`;
 
   return (
     <TooltipProvider>

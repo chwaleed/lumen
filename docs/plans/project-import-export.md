@@ -14,7 +14,7 @@ themselves they are not locked in.
 | **M1** | Safe archive reading — the zip trust boundary | ✅ |
 | **M2** | Export a project as a zip | ✅ |
 | **M3** | Import a zip as a new project | ✅ |
-| **M4** | Export from the editor UI | ⬜ |
+| **M4** | Export from the editor UI | ✅ |
 | **M5** | Import from the dashboard UI | ⬜ |
 | **M6** | End-to-end: the round trip in a browser | ⬜ |
 
