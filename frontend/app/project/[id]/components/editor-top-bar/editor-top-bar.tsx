@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCompileHook } from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { pdfExportName } from "@/lib/projects";
 import { PanelLayoutPopover } from "./panel-layout-popover";
 import { ProfileMenu } from "./profile-menu";
 import { TooltipAction } from "./tooltip-action";
@@ -21,6 +22,7 @@ export function EditorTopBar() {
   const compileStatus = useCompileHook((state) => state.status);
   const compileJobId = useCompileHook((state) => state.jobId);
   const hasPdf = useCompileHook((state) => state.hasPdf);
+  const projectName = useProjectEditorHook((state) => state.projectName);
 
   const isDarkMode = theme === "dark";
   const isCompiling = compileStatus === "queued" || compileStatus === "running";
@@ -28,6 +30,10 @@ export function EditorTopBar() {
     projectId && compileJobId !== null && hasPdf
       ? `/api/projects/${projectId}/compile/${compileJobId}/pdf`
       : null;
+  // An explicit filename: the route serves the PDF inline so the preview can
+  // render it, which leaves a bare `download` to fall back on the URL's last
+  // segment -- saving the file as "pdf", with no extension.
+  const pdfFileName = `${pdfExportName(projectName)}.pdf`;
 
   return (
     <TooltipProvider>
@@ -82,7 +88,7 @@ export function EditorTopBar() {
               disabled={!pdfHref}
             >
               {pdfHref ? (
-                <a href={pdfHref} download>
+                <a href={pdfHref} download={pdfFileName}>
                   <Download data-icon="inline-start" />
                   Export PDF
                 </a>

@@ -155,3 +155,15 @@ export function fileExtension(fileName: string): string {
 export function isUploadable(fileName: string): boolean {
   return (UPLOADABLE_EXTENSIONS as readonly string[]).includes(fileExtension(fileName));
 }
+
+/**
+ * The base name an exported PDF is saved under.
+ *
+ * Path separators would make the browser either reject the `download`
+ * attribute or treat the name as a directory, and a project named only with
+ * separators or spaces must still produce something openable.
+ */
+export function pdfExportName(projectName: string): string {
+  const cleaned = projectName.replace(/[/\\]/g, "-").trim();
+  return cleaned === "" ? "project" : cleaned;
+}
