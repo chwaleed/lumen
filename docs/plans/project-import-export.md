@@ -11,8 +11,8 @@ themselves they are not locked in.
 
 | | Milestone | Status |
 |---|---|---|
-| **M1** | Safe archive reading — the zip trust boundary | ⬜ |
-| **M2** | Export a project as a zip | ⬜ |
+| **M1** | Safe archive reading — the zip trust boundary | ✅ |
+| **M2** | Export a project as a zip | ✅ |
 | **M3** | Import a zip as a new project | ⬜ |
 | **M4** | Export from the editor UI | ⬜ |
 | **M5** | Import from the dashboard UI | ⬜ |
@@ -88,8 +88,13 @@ What it should quietly tolerate, because real zips are messy:
 
 `GET /projects/{id}/export`, streaming `application/zip`.
 
-Reuses `project_source_paths()`. Text entries resolve through the latest snapshot; asset
-entries through S3. Empty folders are preserved, because a user who made one meant it.
+Reuses `project_source_paths()`, which moved to `src/shared/project_files.py` so export
+does not have to depend on the compiles package for it. Text entries resolve through the
+latest snapshot; asset entries through S3.
+
+**Empty folders are dropped.** A zip has no way to carry one that survives a round trip
+through a tree keyed on files, and nothing in LaTeX needs it. Said here because the first
+draft of this plan claimed the opposite.
 
 ## M3 — Import a zip as a new project
 

@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from src.archives.router import router as archives_router
 from src.auth.router import router as auth_router
 from src.core.api_response import ApiResponse, ApiResponseBuilder
 from src.core.config import Settings, get_settings
@@ -42,6 +43,7 @@ def create_app(*, settings: Settings | None = None, init_db_on_startup: bool = T
     app.include_router(file_entries_router)
     app.include_router(file_snapshots_router)
     app.include_router(uploads_router)
+    app.include_router(archives_router)
     app.include_router(compiles_router)
     app.include_router(compile_ops_router)
 

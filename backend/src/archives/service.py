@@ -18,7 +18,11 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import PurePosixPath
 
+from sqlmodel import Session
+
 from src.core.config import Settings
+from src.projects.models import Project
+from src.shared.project_files import entry_bytes, project_source_paths
 
 # Finder adds these to every zip made from the context menu, and no user means
 # to import them.
@@ -198,3 +202,29 @@ def read_archive(data: bytes, settings: Settings) -> list[ArchiveEntry]:
         raise ArchiveError("The archive has no files in it.")
 
     return _strip_common_root(entries)
+
+
+# Windows forbids these outright, and a zip named with one cannot be saved.
+_UNSAFE_FILENAME = re.compile(r'[/\\\x00:*?"<>|]')
+
+
+def archive_file_name(project_name: str) -> str:
+    """The name the downloaded zip is saved under."""
+    cleaned = _UNSAFE_FILENAME.sub("-", project_name).strip().strip(".")
+    return f"{cleaned or 'project'}.zip"
+
+
+def build_project_archive(session: Session, project: Project, settings: Settings) -> bytes:
+    """Every source file in the project, as a zip.
+
+    Sources only. The compiled PDF has its own download, and a zip that
+    contained one would re-import as an uneditable asset shadowing the .tex
+    that produced it.
+    """
+    buffer = BytesIO()
+    # ZIP_DEFLATED, not ZIP_STORED: a LaTeX project is mostly text, and the
+    # bytes here are already held in memory either way.
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for entry, rel_path in project_source_paths(session, project):
+            archive.writestr(rel_path, entry_bytes(session, entry, settings))
+    return buffer.getvalue()
