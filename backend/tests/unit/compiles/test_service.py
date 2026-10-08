@@ -7,7 +7,7 @@ from src.auth.models import User
 from src.compiles import models as _compile_models  # noqa: F401
 from src.compiles.models import STATUS_QUEUED, STATUS_RUNNING, CompileJob
 from src.compiles.service import (
-    MaterialiseError,
+    ProjectFilesError,
     claim_next_job,
     create_job,
     ensure_project_fits,
@@ -101,7 +101,7 @@ class TestProjectSourcePaths:
         # boundary: reject rather than sanitise.
         project = _project(compile_session)
         _file(compile_session, project, name, "x")
-        with pytest.raises(MaterialiseError):
+        with pytest.raises(ProjectFilesError):
             project_source_paths(compile_session, project)
 
 
@@ -119,7 +119,7 @@ class TestResolveRootTex:
         assert resolve_root_tex(["main.tex"], "gone.tex") == "main.tex"
 
     def test_raises_without_any_tex(self) -> None:
-        with pytest.raises(MaterialiseError):
+        with pytest.raises(ProjectFilesError):
             resolve_root_tex(["refs.bib", "logo.png"])
 
 

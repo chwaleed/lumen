@@ -19,7 +19,7 @@ from src.compiles.models import (
     CompileJob,
 )
 from src.compiles.service import (
-    MaterialiseError,
+    ProjectFilesError,
     claim_next_job,
     materialise_project,
     project_source_paths,
@@ -68,7 +68,7 @@ def run_job(session: Session, job: CompileJob, settings: Settings | None = None)
                     (entry.id, path) for entry, path in project_source_paths(session, project)
                 ).get(chosen.id)
         root_tex = resolve_root_tex(paths, root_path)
-    except MaterialiseError as exc:
+    except ProjectFilesError as exc:
         logger.warning("compile job %s could not be materialised: %s", job.id, exc)
         return _finish(
             session, job, STATUS_FAILURE, exit_code=None,

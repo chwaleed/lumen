@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import re
-from pathlib import Path, PurePosixPath
-from urllib.parse import unquote, urlparse
+from pathlib import Path
 
 from sqlmodel import Session, func, select
 
@@ -20,69 +18,17 @@ from src.file_entries.models import FileEntry
 from src.file_snapshots.models import FileSnapshot
 from src.file_snapshots.service import get_latest_file_snapshot
 from src.projects.models import Project
+from src.shared.project_files import (
+    ProjectFilesError,
+    fetch_uploaded_bytes,
+    project_source_paths,
+)
 
 MANIFEST_NAME = ".lumen-manifest"
 # How many queued jobs to consider before giving up on finding one whose owner is
 # under their concurrency limit.
 _CLAIM_CANDIDATES = 50
 TEX_SUFFIXES = (".tex", ".ltx")
-
-# File names come from users, and materialising writes them to disk, so this is a
-# trust boundary. Anything that could escape the work directory is rejected rather
-# than sanitised, because a silently renamed file breaks \input in a way the user
-# cannot see.
-_UNSAFE_NAME = re.compile(r"(^$|^\.{1,2}$|[/\\\x00])")
-
-
-class MaterialiseError(RuntimeError):
-    """A project could not be written to disk safely."""
-
-
-def _safe_component(name: str) -> str:
-    if _UNSAFE_NAME.search(name):
-        raise MaterialiseError(f"Unsafe file or folder name: {name!r}")
-    return name
-
-
-def project_source_paths(session: Session, project: Project) -> list[tuple[FileEntry, str]]:
-    """Every file in the project with its path relative to the project root."""
-    entries = list(
-        session.exec(select(FileEntry).where(FileEntry.project_id == project.id)).all()
-    )
-    by_parent: dict[int | None, list[FileEntry]] = {}
-    for entry in entries:
-        by_parent.setdefault(entry.parent_id, []).append(entry)
-
-    out: list[tuple[FileEntry, str]] = []
-
-    def walk(parent_id: int | None, prefix: PurePosixPath, depth: int) -> None:
-        # The tree is an adjacency list guarded against cycles on write, but a
-        # depth cap means a corrupt row cannot hang the worker.
-        if depth > 64:
-            raise MaterialiseError("Project tree is nested too deeply.")
-        for entry in sorted(by_parent.get(parent_id, []), key=lambda e: (e.name or "")):
-            path = prefix / _safe_component(entry.name)
-            if entry.type == "folder":
-                walk(entry.id, path, depth + 1)
-            else:
-                out.append((entry, str(path)))
-
-    walk(None, PurePosixPath(), 0)
-    return out
-
-
-def _fetch_uploaded_bytes(file_url: str, settings: Settings) -> bytes:
-    """Read an uploaded asset back out of S3 by the URL stored on the entry."""
-    import boto3  # imported lazily: materialising text-only projects needs no AWS
-
-    key = unquote(urlparse(file_url).path).lstrip("/")
-    if not key:
-        raise MaterialiseError(f"Cannot derive an object key from {file_url!r}")
-    body = boto3.client("s3", region_name=settings.s3_region).get_object(
-        Bucket=settings.s3_bucket_name, Key=key
-    )["Body"]
-    return body.read()
-
 
 def materialise_project(
     session: Session,
@@ -103,7 +49,7 @@ def materialise_project(
         target = work_dir / rel_path
         target.parent.mkdir(parents=True, exist_ok=True)
         if entry.file_url:
-            data = _fetch_uploaded_bytes(entry.file_url, settings)
+            data = fetch_uploaded_bytes(entry.file_url, settings)
             if not target.exists() or target.read_bytes() != data:
                 target.write_bytes(data)
         else:
@@ -137,7 +83,7 @@ def resolve_root_tex(paths: list[str], root_file_path: str | None = None) -> str
         return root_file_path
     tex = [p for p in paths if p.lower().endswith(TEX_SUFFIXES)]
     if not tex:
-        raise MaterialiseError("Project contains no .tex file to compile.")
+        raise ProjectFilesError("Project contains no .tex file to compile.")
     for candidate in tex:
         if candidate.lower() == "main.tex":
             return candidate
@@ -407,7 +353,7 @@ def output_path(settings: Settings, relative: str) -> Path:
     root = Path(settings.compile_output_dir).resolve()
     resolved = (root / relative).resolve()
     if not resolved.is_relative_to(root):
-        raise MaterialiseError(f"Output path escapes the output directory: {relative!r}")
+        raise ProjectFilesError(f"Output path escapes the output directory: {relative!r}")
     return resolved
 
 
