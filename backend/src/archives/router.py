@@ -7,6 +7,7 @@ from sqlmodel import Session
 from src.archives.schemas import ProjectImportResponse
 from src.archives.service import (
     ArchiveError,
+    AssetStorageError,
     archive_file_name,
     build_project_archive,
     import_project,
@@ -85,6 +86,10 @@ async def post_project_import(
         # Every refusal in the archive reader is about the user's file, so they
         # are all 400s with the reader's own message.
         raise projects_exception(str(error), status.HTTP_400_BAD_REQUEST) from error
+    except AssetStorageError as error:
+        # 502, not 400: the upload was fine and retrying the same file is the
+        # right thing to do once storage is back.
+        raise projects_exception(str(error), status.HTTP_502_BAD_GATEWAY) from error
 
     return ApiResponseBuilder.success(
         data=ProjectImportResponse(

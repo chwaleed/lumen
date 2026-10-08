@@ -235,6 +235,34 @@ class TestImportsAssets:
             import_project(session, user, "T", data, settings)
 
 
+class TestStorageFailures:
+    def test_says_so_when_storage_rejects_a_figure(
+        self, session: Session, user: User, settings: Settings
+    ) -> None:
+        # No @mock_aws and no credentials, which is how every unconfigured
+        # environment behaves. Without the guard this surfaced to the user as
+        # a bare "Internal server error".
+        from src.archives.service import AssetStorageError
+
+        data = make_zip({"main.tex": "x", "figures/plot.png": b"\x89PNG"})
+
+        with pytest.raises(AssetStorageError, match="could not be stored"):
+            import_project(session, user, "T", data, settings)
+
+    def test_leaves_no_half_built_project_behind(
+        self, session: Session, user: User, settings: Settings
+    ) -> None:
+        from src.projects.models import Project
+
+        data = make_zip({"main.tex": "x", "figures/plot.png": b"\x89PNG"})
+
+        with pytest.raises(Exception):
+            import_project(session, user, "Doomed", data, settings)
+
+        session.rollback()
+        assert session.exec(select(Project).where(Project.name == "Doomed")).all() == []
+
+
 class TestRoundTrip:
     def test_an_exported_project_imports_back_identically(
         self, session: Session, user: User, settings: Settings

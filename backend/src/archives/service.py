@@ -49,6 +49,15 @@ class ArchiveError(Exception):
     """The archive cannot be read safely. The message is shown to the user."""
 
 
+class AssetStorageError(Exception):
+    """The archive was fine; storing its figures was not.
+
+    Separate from ArchiveError because the user cannot fix it by editing their
+    zip -- it means object storage is misconfigured or unreachable, which is
+    ours to fix and must not be reported as a bad upload.
+    """
+
+
 @dataclass(frozen=True)
 class ArchiveEntry:
     path: PurePosixPath
@@ -253,13 +262,24 @@ def _decode(data: bytes) -> str:
 
 def _put_asset(key: str, data: bytes, content_type: str, settings: Settings) -> None:
     import boto3  # lazily, so importing a text-only project needs no AWS
+    from botocore.exceptions import BotoCoreError, ClientError
 
-    boto3.client("s3", region_name=settings.s3_region).put_object(
-        Bucket=settings.s3_bucket_name,
-        Key=key,
-        Body=data,
-        ContentType=content_type,
-    )
+    try:
+        boto3.client("s3", region_name=settings.s3_region).put_object(
+            Bucket=settings.s3_bucket_name,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+    except (BotoCoreError, ClientError) as error:
+        # Without this the import of any project containing a figure fails with
+        # a bare "Internal server error", which tells the user nothing and
+        # points the maintainer at the wrong layer. Missing credentials raise
+        # NoCredentialsError, a BotoCoreError, before any request is sent.
+        raise AssetStorageError(
+            f"The archive was read, but {key.rsplit('/', 1)[-1]!r} could not be "
+            "stored. File storage is unavailable."
+        ) from error
 
 
 def import_project(
