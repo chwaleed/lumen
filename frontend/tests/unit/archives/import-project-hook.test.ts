@@ -48,12 +48,15 @@ describe("importProject", () => {
 
     await useDashboardProjectsHook.getState().importProject(zipFile("My Thesis.zip"));
 
-    const request = axiosRequest.mock.calls[0][0];
-    expect(request.method).toBe("POST");
-    expect(request.url).toBe("/api/projects/import?file_name=My%20Thesis.zip");
-    expect(request.headers["Content-Type"]).toBe("application/zip");
-    // The File itself, not a FormData wrapper around it.
-    expect(request.data).toBeInstanceOf(File);
+    expect(axiosRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: "/api/projects/import?file_name=My%20Thesis.zip",
+        headers: { "Content-Type": "application/zip" },
+        // The File itself, not a FormData wrapper around it.
+        data: expect.any(File),
+      })
+    );
   });
 
   it("puts the imported project at the top of the list", async () => {

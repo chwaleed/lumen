@@ -1,6 +1,6 @@
 # Project import and export (zip)
 
-**Status:** in progress — started 2026-10-09
+**Status:** done — 2026-10-09
 
 Every major LaTeX editor lets you leave with your work and arrive with someone else's.
 Overleaf, Papeeria and TeXpage all do zip in both directions, and a user evaluating us
@@ -16,7 +16,7 @@ themselves they are not locked in.
 | **M3** | Import a zip as a new project | ✅ |
 | **M4** | Export from the editor UI | ✅ |
 | **M5** | Import from the dashboard UI | ✅ |
-| **M6** | End-to-end: the round trip in a browser | ⬜ |
+| **M6** | End-to-end: the round trip in a browser | ✅ |
 
 Each milestone ships with its own tests. The e2e comes last, once there is a full path
 to drive.
@@ -111,10 +111,24 @@ there is no presigned round trip); anything else is skipped and named in the res
 
 ## M4 / M5 — The UI
 
-Export belongs next to Export PDF in the editor top bar. Import belongs on the dashboard,
-where projects are created — it *is* a way of creating one.
+**Export is a File-menu item, not a fifth top-bar button.** Save, Compile and Export PDF
+already crowd that bar, and a download belongs under File.
+
+**Import replaced a dead button.** The dashboard header already had an "Import .tex"
+button wired to nothing. A control that does nothing teaches users not to trust the rest
+of the interface — the same reasoning that removed the fake "Auto-compile On" badge — so
+the real importer took its place rather than sitting next to it.
+
+**A successful import opens the project, unless files were skipped.** In that case it
+stays on the dashboard and names them, with a button through to the project. Navigating
+immediately would flash the list for a frame and throw it away, and "three of your figures
+did not come over" is exactly what a user must not miss.
 
 ## M6 — End to end
 
-Import a zip built by the test, assert the files appear in the editor, export it, and
-assert the exported zip round-trips. Tagged `@backend`.
+`tests/e2e/archives/import-export.spec.ts`, seven tests, `@backend`.
+
+The round trip uses the app's own export as the import fixture, so neither half is proved
+against a hand-written zip. The one test that needs an archive we would never produce —
+carrying a `Makefile` and a `.docx` — builds it with a 50-line STORED-zip writer rather
+than adding a zip dependency for a single file.

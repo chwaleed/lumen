@@ -2,9 +2,9 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { ProjectCard } from "@/app/(dashboard)/components/project-card";
 import { TemplateCard } from "@/app/(dashboard)/components/template-card";
-import { ImportProjectButton } from "@/app/(dashboard)/components/import-project-button";
 import { templatesData } from "@/app/(dashboard)/data/library-data";
 import { useDashboardLayoutHook } from "@/app/(dashboard)/use-dashboard-layout-hook";
 import { useDashboardProjectsHook } from "@/app/(dashboard)/use-dashboard-projects-hook";
@@ -18,6 +18,7 @@ export function DashboardView() {
   const errorMessage = useDashboardProjectsHook((state) => state.errorMessage);
   const createProject = useDashboardProjectsHook((state) => state.createProject);
   const skippedFiles = useDashboardProjectsHook((state) => state.skippedFiles);
+  const lastImportedProjectId = useDashboardProjectsHook((state) => state.lastImportedProjectId);
 
   const filteredProjects = useMemo(
     () => projects.filter((project) => project.name.toLowerCase().includes(searchQuery.toLowerCase())),
@@ -37,19 +38,21 @@ export function DashboardView() {
   return (
     <>
       <section className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-3xl font-semibold">Start something new</h2>
-          {/* Importing is a way of starting a project, so it belongs with the
-              templates rather than off in a settings page. */}
-          <ImportProjectButton />
-        </div>
-        {skippedFiles.length > 0 && (
-          <p className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-            Imported, but {skippedFiles.length} file
-            {skippedFiles.length === 1 ? " was" : "s were"} left out:{" "}
-            {skippedFiles.slice(0, 5).join(", ")}
-            {skippedFiles.length > 5 ? ", …" : ""}
-          </p>
+        <h2 className="text-3xl font-semibold">Start something new</h2>
+        {skippedFiles.length > 0 && lastImportedProjectId && (
+          // Shown instead of navigating straight into the project: these names
+          // are the only chance the user gets to notice what did not come over.
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
+            <p className="text-muted-foreground">
+              Imported, but {skippedFiles.length} file
+              {skippedFiles.length === 1 ? " was" : "s were"} left out:{" "}
+              {skippedFiles.slice(0, 5).join(", ")}
+              {skippedFiles.length > 5 ? ", …" : ""}
+            </p>
+            <Button size="sm" onClick={() => router.push(`/project/${lastImportedProjectId}`)}>
+              Open the project
+            </Button>
+          </div>
         )}
         {filteredTemplates.length === 0 ? (
           <p className="py-12 text-center text-muted-foreground">

@@ -6,6 +6,10 @@ import { Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDashboardProjectsHook } from "@/app/(dashboard)/use-dashboard-projects-hook";
 
+type ImportProjectButtonProps = {
+  className?: string;
+};
+
 /**
  * Import a project from a zip.
  *
@@ -13,7 +17,7 @@ import { useDashboardProjectsHook } from "@/app/(dashboard)/use-dashboard-projec
  * input: the native control cannot be restyled to match, and `accept` still
  * gives the file picker its zip filter.
  */
-export function ImportProjectButton() {
+export function ImportProjectButton({ className }: ImportProjectButtonProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const importProject = useDashboardProjectsHook((state) => state.importProject);
@@ -38,14 +42,23 @@ export function ImportProjectButton() {
           if (!file) {
             return;
           }
+
           const projectId = await importProject(file);
-          if (projectId) {
+          if (!projectId) {
+            return;
+          }
+
+          // Stay put when the archive held files we could not take, so the
+          // user actually reads which ones. Navigating away would show the
+          // notice for a frame and then throw it away.
+          if (useDashboardProjectsHook.getState().skippedFiles.length === 0) {
             router.push(`/project/${projectId}`);
           }
         }}
       />
       <Button
         variant="outline"
+        className={className}
         disabled={isBusy}
         onClick={() => inputRef.current?.click()}
       >

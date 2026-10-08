@@ -33,6 +33,9 @@ type DashboardProjectsState = {
   // What the last import left behind: files in the zip we do not take. Held so
   // the dashboard can say which ones, rather than silently dropping them.
   skippedFiles: string[];
+  // Set alongside skippedFiles so the notice can offer a way into the project
+  // the user was not navigated to.
+  lastImportedProjectId: string | null;
   ensureProjectsLoaded: () => Promise<void>;
   createProject: (options?: CreateProjectOptions) => Promise<string | null>;
   importProject: (file: File) => Promise<string | null>;
@@ -95,6 +98,7 @@ export const useDashboardProjectsHook = create<DashboardProjectsState>()((set, g
   createStatus: "idle",
   errorMessage: null,
   skippedFiles: [],
+  lastImportedProjectId: null,
   ensureProjectsLoaded: async () => {
     const { fetchStatus } = get();
     if (fetchStatus === "loading" || fetchStatus === "loaded") {
@@ -145,7 +149,12 @@ export const useDashboardProjectsHook = create<DashboardProjectsState>()((set, g
     return String(payload.data.id);
   },
   importProject: async (file: File) => {
-    set({ createStatus: "submitting", errorMessage: null, skippedFiles: [] });
+    set({
+      createStatus: "submitting",
+      errorMessage: null,
+      skippedFiles: [],
+      lastImportedProjectId: null,
+    });
 
     // The File goes straight into the request body. FormData would mean a
     // multipart parser on the backend for this one endpoint, and the zip is
@@ -175,6 +184,7 @@ export const useDashboardProjectsHook = create<DashboardProjectsState>()((set, g
       errorMessage: null,
       fetchStatus: "loaded",
       skippedFiles: imported.skipped,
+      lastImportedProjectId: String(imported.project.id),
       projects: [mapProject(imported.project), ...state.projects],
     }));
 

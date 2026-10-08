@@ -1,5 +1,6 @@
-import { Menu, Moon, Search, Sun, Upload } from "lucide-react";
+import { Menu, Moon, Search, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImportProjectButton } from "@/app/(dashboard)/components/import-project-button";
 import { Input } from "@/components/ui/input";
 
 type ProjectsHeaderProps = {
@@ -45,14 +46,11 @@ export function ProjectsHeader({
           {isDarkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
         </Button>
 
-        <Button variant="outline" className="hidden h-10 rounded-full px-5 sm:inline-flex">
-          <Upload data-icon="inline-start" />
-          Import .tex
-        </Button>
-
-        <Button variant="outline" size="icon" className="size-10 rounded-full sm:hidden">
-          <Upload className="size-4" />
-        </Button>
+        {/* Was a dead "Import .tex" button with no handler. A control that does
+            nothing teaches users not to trust the rest of the interface --
+            ai-agent-vision.md section 9, same reasoning that removed the fake
+            "Auto-compile On" badge. */}
+        <ImportProjectButton className="h-10 rounded-full px-5" />
       </div>
     </header>
   );
