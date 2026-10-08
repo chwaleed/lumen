@@ -382,3 +382,15 @@
   cursor: default;
   user-select: none;
 }
+
+/* A scroll container with no visible scrollbar. Used by the file tab strip,
+   where a horizontal bar would sit on the border between the tabs and the
+   editor. Scrolling still works by wheel, trackpad, and keyboard. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

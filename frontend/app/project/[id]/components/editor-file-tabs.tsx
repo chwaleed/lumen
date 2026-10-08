@@ -14,7 +14,11 @@ type EditorFileTabsProps = {
 
 export function EditorFileTabs({ files, activeFileId, onSelectFile, onCloseFile }: EditorFileTabsProps) {
   return (
-    <div className="flex min-w-0 items-center overflow-x-auto">
+    // Scrolls rather than squashing: tabs keep their width (shrink-0) and the
+    // strip slides. The scrollbar is hidden because it would sit on the border
+    // between the tabs and the editor; the tabs are reachable by wheel, trackpad
+    // and keyboard regardless.
+    <div className="flex min-w-0 flex-1 items-center overflow-x-auto scrollbar-none">
       {files.map((file) => (
         <button
           key={file.id}

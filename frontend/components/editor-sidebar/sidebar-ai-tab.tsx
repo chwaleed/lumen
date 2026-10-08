@@ -15,7 +15,7 @@ export function SidebarAiTab({ onCloseSidebar }: SidebarAiTabProps) {
         title={<h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Assistant</h2>}
         onClose={onCloseSidebar}
       />
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="min-h-0 flex-1 p-4">
         <div className="space-y-4">
           <div className="flex flex-col space-y-2">
             <div className="flex items-center space-x-2">

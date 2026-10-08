@@ -69,6 +69,57 @@ test.describe("editor workspace @backend", () => {
     await proof("new file persisted after reload");
   });
 
+  test("scrolls the file list rather than growing past the window", async ({ page }) => {
+    // The scroll area is a flex child, and a flex child defaults to
+    // min-height:auto -- so without min-h-0 it grows to fit every file and the
+    // list runs off the bottom of the window instead of scrolling.
+    for (const name of ["one", "two", "three", "four", "five", "six", "seven", "eight"]) {
+      await page.getByRole("button", { name: "Create file" }).click();
+      const nameField = page.getByRole("textbox").first();
+      await nameField.fill(`${name}.tex`);
+      await nameField.press("Enter");
+      await expect(page.getByText(`${name}.tex`).first()).toBeVisible();
+    }
+
+    const viewport = page.locator("[data-radix-scroll-area-viewport]").first();
+    const fits = await viewport.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { onScreen: box.bottom <= window.innerHeight + 1, scrolls: element.scrollHeight > 0 };
+    });
+    expect(fits.onScreen).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(
+      true,
+    );
+  });
+
+  test("scrolls the tab strip across the editor's full width", async ({ page, proof }) => {
+    // Enough tabs to overflow. They keep their width and the strip slides,
+    // rather than every tab squashing until the names are unreadable.
+    const files = page.locator("[data-radix-scroll-area-viewport] span.truncate");
+    const count = Math.min(await files.count(), 6);
+    for (let index = 0; index < count; index += 1) {
+      await files.nth(index).click();
+    }
+
+    const strip = page.locator(".scrollbar-none").first();
+    const measurements = await strip.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      // The strip owns the whole tab row; a trailing spacer used to claim
+      // flex-1 beside it and take half the width.
+      right: Math.round(element.getBoundingClientRect().right),
+      rowRight: Math.round(
+        element.closest("div.border-b")?.getBoundingClientRect().right ?? -1,
+      ),
+      scrollbarWidth: getComputedStyle(element).scrollbarWidth,
+    }));
+
+    expect(Math.abs(measurements.right - measurements.rowRight)).toBeLessThanOrEqual(2);
+    // Hidden, because it would sit on the border between tabs and editor.
+    expect(measurements.scrollbarWidth).toBe("none");
+    await proof("file tabs across the editor width");
+  });
+
   test("keeps another user out of the project", async ({ page }) => {
     await signInAsNewUser(page, "editor-intruder");
 

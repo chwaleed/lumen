@@ -182,7 +182,9 @@ export function SidebarFilesTab({
       />
 
       <ScrollArea
-        className="flex-1"
+        // min-h-0: a flex item defaults to min-height:auto, so without this
+        // the scroll area grows to fit every file and the list never scrolls.
+        className="min-h-0 flex-1"
         onDragOver={(event) => {
           if (!draggedNodeId) {
             return;

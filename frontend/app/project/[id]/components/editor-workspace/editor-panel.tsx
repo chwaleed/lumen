@@ -96,7 +96,7 @@ function EditorPanelTabs({ onInteract }: { onInteract: () => void }) {
   const closeFile = useProjectEditorHook((state) => state.closeFile);
 
   return (
-    <div className="flex items-center border-b bg-muted/20 overflow-x-auto">
+    <div className="flex items-center border-b bg-muted/20">
       <div className="flex min-w-0 flex-1 items-center">
         {!sidebarOpen ? (
           <Button
@@ -109,6 +109,9 @@ function EditorPanelTabs({ onInteract }: { onInteract: () => void }) {
           </Button>
         ) : null}
 
+        {/* No trailing spacer: it claimed flex-1 too, so the tab strip only
+            ever got half the editor's width and started scrolling at half the
+            tabs it could actually hold. */}
         <EditorFileTabs
           files={openFiles}
           activeFileId={activeFileId}
@@ -121,8 +124,6 @@ function EditorPanelTabs({ onInteract }: { onInteract: () => void }) {
             closeFile(fileId);
           }}
         />
-
-        <div className="min-w-[20px] flex-1" />
       </div>
     </div>
   );
