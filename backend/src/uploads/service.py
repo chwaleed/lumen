@@ -49,7 +49,7 @@ def _safe_file_name(file_name: str) -> str:
     return cleaned_name
 
 
-def _object_url(bucket_name: str, object_key: str) -> str:
+def object_url(bucket_name: str, object_key: str) -> str:
     encoded_key = quote(object_key, safe="/")
     return f"https://{bucket_name}.s3.amazonaws.com/{encoded_key}"
 
@@ -128,7 +128,7 @@ def create_presigned_upload(
 
     return PresignedUploadResponse(
         upload_url=upload_url,
-        file_url=_object_url(settings.s3_bucket_name, object_key),
+        file_url=object_url(settings.s3_bucket_name, object_key),
         object_key=object_key,
         headers={"Content-Type": content_type},
     )

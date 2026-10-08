@@ -20,9 +20,14 @@ from pathlib import PurePosixPath
 
 from sqlmodel import Session
 
+from src.auth.models import User
 from src.core.config import Settings
+from src.file_entries.models import FileEntry
+from src.file_snapshots.service import create_file_snapshot
 from src.projects.models import Project
+from src.shared.project_access import clean_name
 from src.shared.project_files import entry_bytes, project_source_paths
+from src.uploads.service import ALLOWED_EXTENSIONS, object_url
 
 # Finder adds these to every zip made from the context menu, and no user means
 # to import them.
@@ -212,6 +217,153 @@ def archive_file_name(project_name: str) -> str:
     """The name the downloaded zip is saved under."""
     cleaned = _UNSAFE_FILENAME.sub("-", project_name).strip().strip(".")
     return f"{cleaned or 'project'}.zip"
+
+
+# Imported as editable snapshots rather than as S3 assets.
+#
+# This deliberately disagrees with `uploads.ALLOWED_EXTENSIONS`, which treats
+# .bib, .cls and friends as uploads. An uploaded file is read back from S3 and
+# cannot be edited, which is right for a figure and wrong for a bibliography --
+# and every project we create from a template already stores references.bib as
+# a snapshot. Import has to agree with the templates, not with uploads.
+TEXT_SUFFIXES = frozenset(
+    {".tex", ".ltx", ".bib", ".cls", ".sty", ".bst", ".cfg", ".clo", ".def", ".ldf", ".txt"}
+)
+
+_SUFFIX_MIME = {".tex": "text/x-tex", ".ltx": "text/x-tex"}
+
+
+@dataclass
+class ImportResult:
+    project: Project
+    imported: list[str]
+    skipped: list[str]
+
+
+def _decode(data: bytes) -> str:
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        # ponytail: latin-1 fallback, no charset detection. Plenty of older
+        # theses are cp1252/latin-1, and latin-1 maps every byte to a character
+        # so nothing is lost -- worst case the user sees mojibake and can fix
+        # it, which beats refusing the import or silently dropping bytes.
+        return data.decode("latin-1")
+
+
+def _put_asset(key: str, data: bytes, content_type: str, settings: Settings) -> None:
+    import boto3  # lazily, so importing a text-only project needs no AWS
+
+    boto3.client("s3", region_name=settings.s3_region).put_object(
+        Bucket=settings.s3_bucket_name,
+        Key=key,
+        Body=data,
+        ContentType=content_type,
+    )
+
+
+def import_project(
+    session: Session,
+    user: User,
+    project_name: str,
+    data: bytes,
+    settings: Settings,
+) -> ImportResult:
+    """Create a new project from an uploaded zip.
+
+    Always a new project: importing into an existing one needs merge semantics
+    (replace? union? what about conflicts?) that are a separate design problem.
+    """
+    entries = read_archive(data, settings)
+
+    assets_total = sum(
+        len(entry.data)
+        for entry in entries
+        if entry.path.suffix.lower() not in TEXT_SUFFIXES
+        and entry.path.suffix.lower() in ALLOWED_EXTENSIONS
+    )
+    if assets_total > settings.project_max_bytes:
+        raise ArchiveError(
+            f"The archive's assets exceed the "
+            f"{settings.project_max_bytes // (1024 * 1024)} MB project limit."
+        )
+
+    project = Project(name=clean_name(project_name, field_name="Project name"), user_id=user.id)
+    session.add(project)
+    session.flush()
+
+    folders: dict[PurePosixPath, int | None] = {PurePosixPath("."): None}
+
+    def folder_id_for(path: PurePosixPath) -> int | None:
+        """mkdir -p, memoised, so a deep path creates each level once."""
+        if path in folders:
+            return folders[path]
+        parent_id = folder_id_for(path.parent) if path.parent != path else None
+        entry = FileEntry(
+            project_id=project.id, parent_id=parent_id, name=path.name, type="folder"
+        )
+        session.add(entry)
+        session.flush()
+        folders[path] = entry.id
+        return entry.id
+
+    imported: list[str] = []
+    skipped: list[str] = []
+
+    for archive_entry in entries:
+        suffix = archive_entry.path.suffix.lower()
+        rel_path = str(archive_entry.path)
+        parent_id = folder_id_for(archive_entry.path.parent)
+
+        if suffix in TEXT_SUFFIXES:
+            entry = FileEntry(
+                project_id=project.id,
+                parent_id=parent_id,
+                name=archive_entry.name,
+                type="file",
+                mime_type=_SUFFIX_MIME.get(suffix, "text/plain"),
+            )
+            session.add(entry)
+            session.flush()
+            create_file_snapshot(session, entry.id, _decode(archive_entry.data))
+            imported.append(rel_path)
+            continue
+
+        content_type = ALLOWED_EXTENSIONS.get(suffix)
+        if content_type is None:
+            # Not fatal. A real project carries .gitignore, Makefile, .synctex.gz
+            # and build leftovers, and refusing the whole import over them would
+            # make the feature useless.
+            skipped.append(rel_path)
+            continue
+
+        # Keyed by full path, unlike `uploads`, which keys on the bare filename:
+        # a real project has chapters/fig.png and appendix/fig.png, and a flat
+        # key would silently overwrite one with the other.
+        object_key = f"uploads/{project.id}/{rel_path}"
+        _put_asset(object_key, archive_entry.data, content_type, settings)
+        entry = FileEntry(
+            project_id=project.id,
+            parent_id=parent_id,
+            name=archive_entry.name,
+            type="file",
+            mime_type=content_type,
+            file_url=object_url(settings.s3_bucket_name, object_key),
+            size_bytes=len(archive_entry.data),
+        )
+        session.add(entry)
+        session.flush()
+        imported.append(rel_path)
+
+    if not imported:
+        raise ArchiveError(
+            "Nothing in that archive could be imported. "
+            f"Skipped: {', '.join(skipped[:10])}"
+        )
+
+    session.commit()
+    session.refresh(project)
+    return ImportResult(project=project, imported=imported, skipped=skipped)
 
 
 def build_project_archive(session: Session, project: Project, settings: Settings) -> bytes:

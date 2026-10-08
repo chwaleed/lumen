@@ -13,7 +13,7 @@ themselves they are not locked in.
 |---|---|---|
 | **M1** | Safe archive reading — the zip trust boundary | ✅ |
 | **M2** | Export a project as a zip | ✅ |
-| **M3** | Import a zip as a new project | ⬜ |
+| **M3** | Import a zip as a new project | ✅ |
 | **M4** | Export from the editor UI | ⬜ |
 | **M5** | Import from the dashboard UI | ⬜ |
 | **M6** | End-to-end: the round trip in a browser | ⬜ |
@@ -98,7 +98,12 @@ draft of this plan claimed the opposite.
 
 ## M3 — Import a zip as a new project
 
-`POST /projects/import`, multipart, returning the created project.
+`POST /projects/import`, returning the created project.
+
+**The zip is the raw request body, not multipart.** Multipart would mean adding
+`python-multipart` for this one endpoint, and a browser can put a `File` straight into
+fetch's body with no wrapper. The original filename rides along as `?file_name=`, which
+is what the project gets named.
 
 Per entry: text extensions become `file_entries` + a first `file_snapshot`; asset
 extensions are uploaded to S3 server-side (`put_object` — we already hold the bytes, so
