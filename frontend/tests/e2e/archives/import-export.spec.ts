@@ -81,7 +81,9 @@ async function openProject(page: Page, projectId: number) {
   await page.goto(`/project/${projectId}`);
   // Monaco only mounts on the client, so it stands in for "hydrated" -- a
   // menu clicked before that swallows the click.
-  await expect(page.locator(".monaco-editor").first()).toBeVisible();
+  // A generous timeout, not the 5s default: Monaco is lazily loaded and a
+  // suite running six browsers at once regularly needs longer than that.
+  await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 30_000 });
 }
 
 /** Clicks File -> Download as .zip and returns the saved bytes. */

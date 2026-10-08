@@ -123,7 +123,9 @@ async function newProject(page: Page, name: string) {
  */
 async function openProject(page: Page, projectId: number) {
   await page.goto(`/project/${projectId}`);
-  await expect(page.locator(".monaco-editor").first()).toBeVisible();
+  // A generous timeout, not the 5s default: Monaco is lazily loaded and a
+  // suite running six browsers at once regularly needs longer than that.
+  await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 30_000 });
 }
 
 /** The preview pane's Compile button, as opposed to the top bar's. */
