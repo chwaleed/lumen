@@ -32,7 +32,11 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      // `channel: "chromium"` selects Chrome's new headless mode, which ships
+      // the built-in PDF viewer. Old headless has none, so it downloads every
+      // application/pdf response instead of rendering it -- which would make
+      // the compile preview untestable headlessly.
+      use: { ...devices["Desktop Chrome"], channel: "chromium" },
     },
   ],
 
