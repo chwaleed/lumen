@@ -180,6 +180,40 @@ class TestReadCompile:
         assert response.headers["content-type"] == "application/pdf"
         assert response.content.startswith(b"%PDF")
 
+    def test_pdf_is_served_inline_so_the_preview_can_render_it(
+        self, api: TestClient
+    ) -> None:
+        # Regression: FileResponse defaults to `attachment` whenever a filename
+        # is passed, which makes the browser download the PDF instead of showing
+        # it in the preview iframe.
+        h = _auth(api, "inline@example.com")
+        project_id = _new_project(api, h)
+        job_id = _queue(api, h, project_id)
+
+        from sqlmodel import Session
+
+        from src.compiles.models import CompileJob
+        from src.db.session import get_engine
+
+        settings = get_settings()
+        out = Path(settings.compile_output_dir) / str(job_id)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "main.pdf").write_bytes(b"%PDF-1.7\n%fake\n")
+        with Session(get_engine(settings)) as session:
+            job = session.get(CompileJob, job_id)
+            job.pdf_path = f"{job_id}/main.pdf"
+            job.status = "success"
+            session.add(job)
+            session.commit()
+
+        response = api.get(f"/projects/{project_id}/compile/{job_id}/pdf", headers=h)
+
+        disposition = response.headers["content-disposition"]
+        assert disposition.startswith("inline"), disposition
+        assert "attachment" not in disposition
+        # The name still travels, for anyone who does choose to save it.
+        assert 'filename="main.pdf"' in disposition
+
 
     def test_log_returns_ranked_diagnostics(self, api: TestClient) -> None:
         h = _auth(api, "diag@example.com")
