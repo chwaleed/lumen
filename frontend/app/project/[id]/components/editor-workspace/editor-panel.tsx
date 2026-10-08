@@ -2,7 +2,6 @@
 
 import type { editor as MonacoEditor } from "monaco-editor";
 import { PanelLeftOpen } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { EditorFileTabs } from "@/app/project/[id]/components/editor-file-tabs";
@@ -89,7 +88,6 @@ function EditorPanelBody({
 }
 
 function EditorPanelTabs({ onInteract }: { onInteract: () => void }) {
-  const router = useRouter();
   const openFiles = useProjectEditorHook((state) => state.openFiles);
   const activeFileId = useProjectEditorHook((state) => state.activeFileId);
   const sidebarOpen = useProjectEditorHook((state) => state.sidebarOpen);
@@ -125,17 +123,6 @@ function EditorPanelTabs({ onInteract }: { onInteract: () => void }) {
         />
 
         <div className="min-w-[20px] flex-1" />
-      </div>
-
-      <div className="shrink-0 px-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 px-2"
-          onClick={() => router.push("/dashboard")}
-        >
-          Back
-        </Button>
       </div>
     </div>
   );
