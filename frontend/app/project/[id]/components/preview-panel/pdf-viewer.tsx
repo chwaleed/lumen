@@ -40,9 +40,13 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const pageWidthRef = useRef<number | null>(null);
   const pagesRef = useRef<HTMLDivElement | null>(null);
+  // Read inside callbacks that must not change identity when the scale does:
+  // PdfPage re-runs its sizing effect whenever `onSize` changes.
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
   // Where the middle of the viewport sat, as a fraction of the whole
   // document, at the moment zoom was requested.
-  const zoomAnchorRef = useRef<number | null>(null);
+  const zoomAnchorRef = useRef<{ y: number; x: number } | null>(null);
 
   /**
    * Zoom while staying where you were looking.
@@ -54,8 +58,13 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
   const applyScale = useCallback((next: number) => {
     const container = scrollRef.current;
     if (container && container.scrollHeight > 0) {
-      const centre = container.scrollTop + container.clientHeight / 2;
-      zoomAnchorRef.current = centre / container.scrollHeight;
+      zoomAnchorRef.current = {
+        y: (container.scrollTop + container.clientHeight / 2) / container.scrollHeight,
+        // Horizontal too, or zooming out leaves the view stuck off to one
+        // side: the content narrows but scrollLeft keeps whatever zooming in
+        // put there.
+        x: (container.scrollLeft + container.clientWidth / 2) / container.scrollWidth,
+      };
     }
     setScale(clampScale(next));
   }, []);
@@ -75,7 +84,8 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
       if (anchor === null) {
         return;
       }
-      container.scrollTop = anchor * container.scrollHeight - container.clientHeight / 2;
+      container.scrollTop = anchor.y * container.scrollHeight - container.clientHeight / 2;
+      container.scrollLeft = anchor.x * container.scrollWidth - container.clientWidth / 2;
     };
 
     restore();
@@ -130,39 +140,43 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
     };
   }, [src]);
 
-  // Record the unscaled page width once, so "fit" can be computed without
-  // asking the document again on every resize.
-  const onPageSize = useCallback(
-    (pageNumber: number, width: number) => {
-      if (pageNumber === 1) {
-        pageWidthRef.current = width / scale;
-      }
-    },
-    [scale],
-  );
-
   const fitWidth = useCallback(() => {
     const container = scrollRef.current;
     const naturalWidth = pageWidthRef.current;
     if (!container || !naturalWidth) {
       return;
     }
-    // Leave room for the scrollbar and the page's own margin.
+    // Leave room for the page's own margin; the scrollbar's width is already
+    // reserved by scrollbar-gutter on the container.
     applyScale((container.clientWidth - 32) / naturalWidth);
   }, [applyScale]);
 
-  // Fit on first load, so a thesis does not open at an arbitrary zoom.
   const hasFittedRef = useRef(false);
-  useEffect(() => {
-    if (document && !hasFittedRef.current && pageWidthRef.current) {
-      hasFittedRef.current = true;
-      fitWidth();
-    }
-  });
-
   useEffect(() => {
     hasFittedRef.current = false;
   }, [src]);
+
+  /**
+   * Record page one's unscaled width, and fit to it the first time it is
+   * known.
+   *
+   * Fitting happens here rather than in an effect because the width arrives in
+   * a ref, and a ref does not re-render -- an effect watching for it only ran
+   * when something unrelated happened to re-render first.
+   */
+  const onPageSize = useCallback(
+    (pageNumber: number, width: number) => {
+      if (pageNumber !== 1) {
+        return;
+      }
+      pageWidthRef.current = width / scaleRef.current;
+      if (!hasFittedRef.current) {
+        hasFittedRef.current = true;
+        fitWidth();
+      }
+    },
+    [fitWidth],
+  );
 
   const goToPage = useCallback(
     (pageNumber: number) => {
@@ -274,9 +288,25 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
         </Button>
       </div>
 
-      <div ref={scrollRef} data-pdf-scroll className="min-h-0 flex-1 overflow-auto p-4">
+      <div
+        ref={scrollRef}
+        data-pdf-scroll
+        // scrollbar-gutter:stable reserves the vertical scrollbar's width up
+        // front. Without it "fit to width" is computed against a pane that is
+        // still ~8px wider than it will be once the scrollbar appears, and the
+        // page ends up permanently overflowing by that much.
+        className="min-h-0 flex-1 overflow-auto p-4 [scrollbar-gutter:stable]"
+      >
         {document ? (
-          <div ref={pagesRef} className="flex flex-col items-center gap-4">
+          <div
+            ref={pagesRef}
+            // w-fit min-w-full: at least as wide as the pane so pages centre,
+            // but free to grow past it when zoomed in. Plain items-center on
+            // an overflowing child pushes its left edge out of reach -- you
+            // can scroll right to the rest of the page but never back to the
+            // start of the line.
+            className="flex w-fit min-w-full flex-col items-center gap-4"
+          >
             {Array.from({ length: document.numPages }, (_, index) => (
               <PdfPage
                 key={index + 1}

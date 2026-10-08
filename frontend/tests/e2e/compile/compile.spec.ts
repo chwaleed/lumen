@@ -28,7 +28,7 @@ function minimalPdf(): Buffer {
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>",
   ];
 
   let body = "%PDF-1.7\n";
@@ -242,6 +242,46 @@ test.describe("compile preview @backend", () => {
     // A real canvas, drawn by pdf.js -- not a plugin we have no control over.
     await expect(viewer.locator("canvas")).toHaveCount(1);
     await proof("pdf rendered by pdf.js");
+  });
+
+  test("zooming keeps your place and does not strand the view sideways", async ({
+    page,
+  }) => {
+    await stubCompile(page);
+    await openProject(page, projectId);
+    await compileButton(page).click();
+
+    const viewer = page.getByLabel("Compiled PDF preview");
+    await expect(viewer.locator("canvas")).toHaveCount(1);
+
+    const scroller = viewer.locator("[data-pdf-scroll]");
+    const measure = () =>
+      scroller.evaluate((element) => ({
+        left: Math.round(element.scrollLeft),
+        overflows: element.scrollWidth > element.clientWidth + 1,
+      }));
+
+    expect(await measure()).toEqual({ left: 0, overflows: false });
+
+    const zoomIn = viewer.getByRole("button", { name: "Zoom in" });
+    const zoomOut = viewer.getByRole("button", { name: "Zoom out" });
+
+    for (let step = 0; step < 5; step += 1) {
+      await zoomIn.click();
+    }
+    expect((await measure()).overflows).toBe(true);
+
+    for (let step = 0; step < 5; step += 1) {
+      await zoomOut.click();
+    }
+
+    // Back where it started: zooming out used to leave the page overflowing
+    // and the view stranded to one side, because scrollLeft kept whatever
+    // zooming in had put there.
+    await expect
+      .poll(async () => (await measure()).overflows, { timeout: 5_000 })
+      .toBe(false);
+    expect((await measure()).left).toBe(0);
   });
 
   test("offers the PDF for export under the project's name", async ({ page }) => {
