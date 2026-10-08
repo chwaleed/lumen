@@ -7,6 +7,7 @@ import { useCompileHook } from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { exportBaseName } from "@/lib/projects";
+import { CompileStatus, PreviewTabs } from "./compile-controls";
 import { PanelLayoutPopover } from "./panel-layout-popover";
 import { ProfileMenu } from "./profile-menu";
 import { TooltipAction } from "./tooltip-action";
@@ -47,18 +48,12 @@ export function EditorTopBar() {
           <TopBarMenus />
         </div>
 
+        {/* Ordered the way the work flows: how the last build went, the button
+            that starts the next one, what it produced, then saving and
+            exporting. */}
         <div className="flex items-center gap-2">
-          <TooltipAction label="Save file">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="hidden sm:inline-flex"
-              onClick={() => void saveActiveFile()}
-            >
-              <Save data-icon="inline-start" />
-              Save
-            </Button>
-          </TooltipAction>
+          <CompileStatus />
+
           <TooltipAction label={isCompiling ? "Compiling…" : "Compile document"}>
             <Button
               variant="outline"
@@ -75,30 +70,45 @@ export function EditorTopBar() {
               {isCompiling ? "Compiling" : "Compile"}
             </Button>
           </TooltipAction>
+
+          <PreviewTabs />
+
+          <TooltipAction label="Save file">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="hidden sm:inline-flex"
+              onClick={() => void saveActiveFile()}
+            >
+              <Save data-icon="inline-start" />
+              Save
+            </Button>
+          </TooltipAction>
+
           <TooltipAction
             label={pdfHref ? "Download the compiled PDF" : "Compile the project first"}
           >
-            {/* A download rather than a fetch: the browser saves the bytes the
-                proxy route already serves, so there is nothing to hold in memory. */}
-            <Button
-              asChild={Boolean(pdfHref)}
-              variant="default"
-              size="sm"
-              className="hidden sm:inline-flex"
-              disabled={!pdfHref}
-            >
-              {pdfHref ? (
+            {/* Two buttons rather than one with a conditional child. Button is
+                inline-flex with a gap between its direct children, so wrapping
+                the icon and label in a <span> made them a single flex child --
+                the icon then baseline-aligned against the text instead of
+                centring, which is why this only looked wrong before a compile.
+
+                A download rather than a fetch: the browser saves the bytes the
+                proxy route already serves, so nothing is held in memory. */}
+            {pdfHref ? (
+              <Button asChild variant="default" size="sm" className="hidden sm:inline-flex">
                 <a href={pdfHref} download={pdfFileName}>
                   <Download data-icon="inline-start" />
                   Export PDF
                 </a>
-              ) : (
-                <span>
-                  <Download data-icon="inline-start" />
-                  Export PDF
-                </span>
-              )}
-            </Button>
+              </Button>
+            ) : (
+              <Button variant="default" size="sm" className="hidden sm:inline-flex" disabled>
+                <Download data-icon="inline-start" />
+                Export PDF
+              </Button>
+            )}
           </TooltipAction>
 
           <TooltipAction label={isDarkMode ? "Switch to light theme" : "Switch to dark theme"}>

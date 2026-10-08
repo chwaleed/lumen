@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, FileText, Play, ScrollText, X } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   useCompileHook,
@@ -10,25 +10,27 @@ import {
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { CompileErrors } from "./compile-errors";
 import { CompileLog } from "./compile-log";
-import { CompileStatusBadge } from "./compile-status";
 import { PdfViewer } from "./pdf-viewer";
 import { PreviewEmptyState } from "./preview-empty-state";
 import { revealDiagnostic } from "./reveal-diagnostic";
 
+/**
+ * The preview pane: a PDF, a problem list, or a log, and nothing else.
+ *
+ * The status badge and the view switcher live in the top bar. A header strip
+ * here would cost the PDF ~40px of height and would sit a few centimetres
+ * below a Compile button that already exists up there.
+ */
 export function PreviewPanel() {
   const projectId = useProjectEditorHook((state) => state.projectId);
 
   const jobId = useCompileHook((state) => state.jobId);
   const status = useCompileHook((state) => state.status);
-  const errorCount = useCompileHook((state) => state.errorCount);
-  const durationMs = useCompileHook((state) => state.durationMs);
   const hasPdf = useCompileHook((state) => state.hasPdf);
   const log = useCompileHook((state) => state.log);
   const errors = useCompileHook((state) => state.errors);
   const warnings = useCompileHook((state) => state.warnings);
   const view = useCompileHook((state) => state.view);
-  const compile = useCompileHook((state) => state.compile);
-  const cancel = useCompileHook((state) => state.cancel);
   const setView = useCompileHook((state) => state.setView);
 
   const isBusy = status === "queued" || status === "running";
@@ -47,74 +49,28 @@ export function PreviewPanel() {
     revealDiagnostic(diagnostic);
   };
 
+  // Only while something other than the PDF is showing, and only when there
+  // is a PDF to go back to. The top-bar chip toggles too, but nothing on this
+  // pane said so once you were looking at a wall of log output.
+  const canReturnToPdf = Boolean(pdfSrc) && activeView !== "pdf";
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-4 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Preview</span>
-          <CompileStatusBadge status={status} errorCount={errorCount} durationMs={durationMs} />
+    <div className="flex h-full flex-col overflow-hidden">
+      {canReturnToPdf && (
+        <div className="flex shrink-0 items-center justify-end border-b bg-muted/20 px-2 py-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setView("pdf")}
+          >
+            <FileText data-icon="inline-start" />
+            Back to PDF
+          </Button>
         </div>
+      )}
 
-        <div className="flex items-center gap-1">
-          {problemCount > 0 && (
-            <Button
-              variant={activeView === "problems" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setView("problems")}
-            >
-              <AlertCircle data-icon="inline-start" />
-              {problemCount}
-            </Button>
-          )}
-          {pdfSrc && (
-            <Button
-              variant={activeView === "pdf" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setView("pdf")}
-            >
-              <FileText data-icon="inline-start" />
-              PDF
-            </Button>
-          )}
-          {log !== null && (
-            <Button
-              variant={activeView === "log" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setView("log")}
-            >
-              <ScrollText data-icon="inline-start" />
-              Log
-            </Button>
-          )}
-
-          {isBusy ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => projectId && void cancel(projectId)}
-            >
-              <X data-icon="inline-start" />
-              Cancel
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => projectId && void compile(projectId)}
-            >
-              <Play data-icon="inline-start" />
-              Compile
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {activeView === "problems" ? (
           <CompileErrors errors={errors} warnings={warnings} onSelect={onSelect} />
         ) : activeView === "log" && log !== null ? (
