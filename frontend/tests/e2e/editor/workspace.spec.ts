@@ -15,6 +15,11 @@ test.describe("editor workspace @backend", () => {
     projectId = (await created.json()).data.id;
 
     await page.goto(`/project/${projectId}`);
+    // Wait for hydration before any test clicks anything: a server-rendered
+    // button is clickable the moment it paints, which is before React attaches
+    // its handler, and the click is then silently swallowed. Monaco only ever
+    // mounts on the client, so its presence stands in for "hydrated".
+    await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 30_000 });
   });
 
   test("opens the workspace with the project's starting files", async ({ page, proof }) => {
@@ -50,9 +55,9 @@ test.describe("editor workspace @backend", () => {
     // only sent to the API once the name is confirmed.
     await page.getByRole("button", { name: "Create file" }).click();
 
-    // Match on role, not on value: fill() changes the value and an
-    // input[value=...] selector would stop resolving mid-test.
-    const nameField = page.getByRole("textbox").first();
+    // An <input>, specifically: Monaco exposes a div[role="textbox"] too, and
+    // a bare role lookup resolves to whichever renders first.
+    const nameField = page.locator('input:not([type="file"])').first();
     await expect(nameField).toBeVisible();
     await expect(nameField).toHaveValue("untitled.tex");
     await proof("naming the new file");
@@ -75,7 +80,8 @@ test.describe("editor workspace @backend", () => {
     // list runs off the bottom of the window instead of scrolling.
     for (const name of ["one", "two", "three", "four", "five", "six", "seven", "eight"]) {
       await page.getByRole("button", { name: "Create file" }).click();
-      const nameField = page.getByRole("textbox").first();
+      const nameField = page.locator('input:not([type="file"])').first();
+      await expect(nameField).toBeVisible();
       await nameField.fill(`${name}.tex`);
       await nameField.press("Enter");
       await expect(page.getByText(`${name}.tex`).first()).toBeVisible();

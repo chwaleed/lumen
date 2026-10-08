@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus } from "lucide-react";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,60 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
   const [scale, setScale] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const pageWidthRef = useRef<number | null>(null);
+  const pagesRef = useRef<HTMLDivElement | null>(null);
+  // Where the middle of the viewport sat, as a fraction of the whole
+  // document, at the moment zoom was requested.
+  const zoomAnchorRef = useRef<number | null>(null);
+
+  /**
+   * Zoom while staying where you were looking.
+   *
+   * Changing scale re-lays out every page, but the scroll container keeps its
+   * old scrollTop -- which now points at a different part of a taller or
+   * shorter document, so zooming teleported you somewhere else entirely.
+   */
+  const applyScale = useCallback((next: number) => {
+    const container = scrollRef.current;
+    if (container && container.scrollHeight > 0) {
+      const centre = container.scrollTop + container.clientHeight / 2;
+      zoomAnchorRef.current = centre / container.scrollHeight;
+    }
+    setScale(clampScale(next));
+  }, []);
+
+  // Page heights arrive a tick after a scale change (each page asks pdf.js for
+  // its new viewport), so the anchor is re-applied as the content resizes
+  // rather than once, immediately, against a stale height.
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    const pages = pagesRef.current;
+    if (!container || !pages) {
+      return;
+    }
+
+    const restore = () => {
+      const anchor = zoomAnchorRef.current;
+      if (anchor === null) {
+        return;
+      }
+      container.scrollTop = anchor * container.scrollHeight - container.clientHeight / 2;
+    };
+
+    restore();
+    const observer = new ResizeObserver(restore);
+    observer.observe(pages);
+    // Long enough for the pages to settle, short enough that the user's next
+    // scroll is their own.
+    const timer = setTimeout(() => {
+      zoomAnchorRef.current = null;
+      observer.disconnect();
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [scale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,8 +148,8 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
       return;
     }
     // Leave room for the scrollbar and the page's own margin.
-    setScale(clampScale((container.clientWidth - 32) / naturalWidth));
-  }, []);
+    applyScale((container.clientWidth - 32) / naturalWidth);
+  }, [applyScale]);
 
   // Fit on first load, so a thesis does not open at an arbitrary zoom.
   const hasFittedRef = useRef(false);
@@ -192,7 +246,7 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
           size="icon"
           className="size-7"
           aria-label="Zoom out"
-          onClick={() => setScale((value) => clampScale(value - ZOOM_STEP))}
+          onClick={() => applyScale(scale - ZOOM_STEP)}
         >
           <Minus />
         </Button>
@@ -204,7 +258,7 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
           size="icon"
           className="size-7"
           aria-label="Zoom in"
-          onClick={() => setScale((value) => clampScale(value + ZOOM_STEP))}
+          onClick={() => applyScale(scale + ZOOM_STEP)}
         >
           <Plus />
         </Button>
@@ -222,7 +276,7 @@ export function PdfViewer({ src, title }: PdfViewerProps) {
 
       <div ref={scrollRef} data-pdf-scroll className="min-h-0 flex-1 overflow-auto p-4">
         {document ? (
-          <div className="flex flex-col items-center gap-4">
+          <div ref={pagesRef} className="flex flex-col items-center gap-4">
             {Array.from({ length: document.numPages }, (_, index) => (
               <PdfPage
                 key={index + 1}

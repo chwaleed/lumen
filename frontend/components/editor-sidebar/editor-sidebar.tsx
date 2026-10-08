@@ -12,6 +12,7 @@ function getDefaultCreateName(type: FileNode["type"]) {
 export function EditorSidebar({
   activeSidebarTab,
   sidebarOpen,
+  layout = "overlay",
   projectName,
   files: incomingFiles,
   setSidebarOpen,
@@ -192,7 +193,14 @@ export function EditorSidebar({
   };
 
   return (
-    <div className="absolute left-0 z-20 md:relative md:left-0 w-full sm:w-72 flex-shrink-0 border-r bg-background md:bg-muted/10 flex-col h-full shadow-xl md:shadow-none flex">
+    <div
+      className={
+        layout === "docked"
+          ? // Width comes from the resizable panel, so none is set here.
+            "relative flex h-full w-full min-w-0 flex-col border-r bg-muted/10"
+          : "absolute left-0 z-20 flex h-full w-full flex-shrink-0 flex-col border-r bg-background shadow-xl sm:w-72"
+      }
+    >
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadInputChange} />
       {activeSidebarTab === "files" ? (
         <SidebarFilesTab

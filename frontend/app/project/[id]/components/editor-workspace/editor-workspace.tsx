@@ -76,6 +76,48 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
 
   const previewSize = useMemo(() => (sidebarOpen ? 40 : 50), [sidebarOpen]);
 
+  // One sidebar, rendered in one of two places: inside the resizable group
+  // on desktop so it can be dragged wider, and floating above the editor on
+  // small screens where there is no room to take width from anything.
+  const sidebar = (
+    <EditorSidebar
+      layout={isMobile ? "overlay" : "docked"}
+        activeSidebarTab={activeSidebarTab}
+        sidebarOpen={sidebarOpen}
+        projectName={projectName}
+        files={filesTree}
+        setSidebarOpen={setSidebarOpen}
+        onOpenFile={(file) => {
+          selection.clear();
+          openFile(file);
+        }}
+        onCreateEntry={async (parentId, type, name) => {
+          selection.clear();
+          await createEntry(parentId, type, name);
+        }}
+        onUploadFile={async (parentId, file) => {
+          selection.clear();
+          await uploadFile(parentId, file);
+        }}
+        onRenameEntry={async (entryId, name) => {
+          selection.clear();
+          return renameEntry(entryId, name);
+        }}
+        onMoveEntry={async (entryId, parentId) => {
+          selection.clear();
+          return moveEntry(entryId, parentId);
+        }}
+        onDeleteEntry={async (entryId) => {
+          selection.clear();
+          return deleteEntry(entryId);
+        }}
+        onRenameProject={async (name) => {
+          selection.clear();
+          return renameProject(name);
+        }}
+      />
+  );
+
   return (
     <div className="flex h-dvh overflow-hidden flex-col bg-background text-foreground">
       <EditorTopBar />
@@ -95,52 +137,35 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
           />
         ) : null}
 
-        <EditorSidebar
-          activeSidebarTab={activeSidebarTab}
-          sidebarOpen={sidebarOpen}
-          projectName={projectName}
-          files={filesTree}
-          setSidebarOpen={setSidebarOpen}
-          onOpenFile={(file) => {
-            selection.clear();
-            openFile(file);
-          }}
-          onCreateEntry={async (parentId, type, name) => {
-            selection.clear();
-            await createEntry(parentId, type, name);
-          }}
-          onUploadFile={async (parentId, file) => {
-            selection.clear();
-            await uploadFile(parentId, file);
-          }}
-          onRenameEntry={async (entryId, name) => {
-            selection.clear();
-            return renameEntry(entryId, name);
-          }}
-          onMoveEntry={async (entryId, parentId) => {
-            selection.clear();
-            return moveEntry(entryId, parentId);
-          }}
-          onDeleteEntry={async (entryId) => {
-            selection.clear();
-            return deleteEntry(entryId);
-          }}
-          onRenameProject={async (name) => {
-            selection.clear();
-            return renameProject(name);
-          }}
-        />
+        {isMobile ? sidebar : null}
 
         <div ref={containerRef} className="min-w-0 flex-1 overflow-hidden">
           <ResizablePanelGroup
             direction={isMobile ? "vertical" : "horizontal"}
             className="h-full w-full"
           >
+            {!isMobile && sidebarOpen ? (
+              <>
+                <ResizablePanel id="sidebar" defaultSize="260px" minSize="200px" maxSize="520px">
+                  {sidebar}
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+              </>
+            ) : null}
+
             {editorOpen ? (
               <ResizablePanel
+                id="editor"
                 defaultSize={previewOpen ? 60 : 100}
-                minSize={!isMobile && previewOpen ? minWidths.editor : 20}
-                maxSize={!isMobile && previewOpen ? maxWidths.editor : undefined}
+                // Pixels, as strings: a bare number is read as a percentage,
+                // so the breakpoint widths these come from meant "480%" and
+                // were silently clamped to the whole group.
+                minSize={!isMobile && previewOpen ? `${minWidths.editor}px` : "20%"}
+                maxSize={
+                  !isMobile && previewOpen && maxWidths.editor !== undefined
+                    ? `${maxWidths.editor}px`
+                    : undefined
+                }
               >
                 <EditorPanel
                   activeFile={activeFile}
@@ -156,9 +181,14 @@ export function EditorWorkspace({ projectId }: EditorWorkspaceProps) {
 
             {previewOpen ? (
               <ResizablePanel
+                id="preview"
                 defaultSize={editorOpen ? previewSize : 100}
-                minSize={!isMobile && editorOpen ? minWidths.preview : 20}
-                maxSize={!isMobile && editorOpen ? maxWidths.preview : undefined}
+                minSize={!isMobile && editorOpen ? `${minWidths.preview}px` : "20%"}
+                maxSize={
+                  !isMobile && editorOpen && maxWidths.preview !== undefined
+                    ? `${maxWidths.preview}px`
+                    : undefined
+                }
               >
                 <PreviewPanel />
               </ResizablePanel>

@@ -3,6 +3,11 @@ export type SidebarTab = "files" | "ai";
 export type SidebarProps = {
   activeSidebarTab: SidebarTab | string;
   sidebarOpen: boolean;
+  /**
+   * "docked" sits in a resizable panel and takes its width from it.
+   * "overlay" floats above the editor, which is what small screens get.
+   */
+  layout?: "docked" | "overlay";
   projectName: string;
   files: FileNode[];
   setSidebarOpen: (open: boolean) => void;
