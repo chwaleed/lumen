@@ -29,6 +29,24 @@ cd frontend && bun install && bun dev        # :3000
 - `requirements.txt` changed → `docker compose up -d --build backend`.
 - Backend tests: `cd backend && pytest` (pytest is not in `requirements.txt`; install it globally).
 
+### Compiling locally
+
+`docker compose up -d` does **not** give you working compilation. The queue fills and
+nothing drains it, so Compile spins forever in the UI. The worker runs on the host
+because it drives the Docker daemon directly — it is not in compose, which would mean
+mounting the socket into a container and keeping its bind-mount paths identical to the
+host's.
+
+```bash
+cd compile && docker build -t lumen-tex:latest . && ./verify.sh   # ~8GB, once
+cd backend && python -m src.compiles.worker                       # leave it running
+```
+
+The worker and the API must share one database. Compose does not publish Postgres, and
+on a host that already runs its own Postgres `localhost:5432` is a *different* server —
+point `POSTGRES_CONNECTION_STRING` at the container (`docker compose exec backend
+printenv POSTGRES_CONNECTION_STRING`, then swap the host for the container's IP).
+
 ## Testing
 
 Frontend uses **`bun test`** for logic and **Playwright** for flows. A feature owns a
