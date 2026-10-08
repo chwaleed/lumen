@@ -40,6 +40,13 @@ function DiagnosticRow({
         <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
           {location}
         </span>
+        {diagnostic.context ? (
+          // What TeX had read when it stopped, with the break point marked.
+          // "Missing $ inserted." on line 6 is a riddle without it.
+          <span className="mt-1 block overflow-x-auto rounded bg-muted/60 px-2 py-1 font-mono text-[10px] whitespace-pre text-muted-foreground">
+            {diagnostic.context}
+          </span>
+        ) : null}
       </span>
     </button>
   );

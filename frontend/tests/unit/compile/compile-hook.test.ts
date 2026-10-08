@@ -95,7 +95,7 @@ describe("useCompileHook", () => {
 
   it("clears the previous compile's diagnostics when a new one starts", async () => {
     useCompileHook.setState({
-      errors: [{ severity: "error", message: "stale", file: "old.tex", line: 1 }],
+      errors: [{ severity: "error", message: "stale", file: "old.tex", line: 1, context: null }],
       view: "problems",
     });
     respondInOrderWithApi([

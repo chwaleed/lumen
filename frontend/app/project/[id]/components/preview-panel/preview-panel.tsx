@@ -9,6 +9,7 @@ import {
 } from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 import { CompileErrors } from "./compile-errors";
+import { CompileFailureNotice } from "./compile-failure-notice";
 import { CompileLog } from "./compile-log";
 import { PdfViewer } from "./pdf-viewer";
 import { PreviewEmptyState } from "./preview-empty-state";
@@ -32,6 +33,7 @@ export function PreviewPanel() {
   const warnings = useCompileHook((state) => state.warnings);
   const view = useCompileHook((state) => state.view);
   const setView = useCompileHook((state) => state.setView);
+  const message = useCompileHook((state) => state.message);
 
   const isBusy = status === "queued" || status === "running";
   const problemCount = errors.length + warnings.length;
@@ -40,10 +42,20 @@ export function PreviewPanel() {
       ? `/api/projects/${projectId}/compile/${jobId}/pdf`
       : null;
 
-  // With no explicit choice, follow the compile: the PDF when there is one,
-  // the problems when the build failed.
+  const hasFailed = status === "failure" || status === "timeout";
+
+  // With no explicit choice, follow the compile. A failed run shows its
+  // problems first even when it still emitted a PDF: defaulting to the PDF
+  // hid the errors behind a chip and made a broken build look finished.
   const activeView: PreviewView | null =
-    view ?? (pdfSrc ? "pdf" : problemCount > 0 ? "problems" : null);
+    view ??
+    (hasFailed && problemCount > 0
+      ? "problems"
+      : pdfSrc
+        ? "pdf"
+        : problemCount > 0
+          ? "problems"
+          : null);
 
   const onSelect = (diagnostic: CompileDiagnostic) => {
     revealDiagnostic(diagnostic);
@@ -56,6 +68,10 @@ export function PreviewPanel() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {hasFailed && message ? (
+        <CompileFailureNotice reason={message} hasPdf={Boolean(pdfSrc)} />
+      ) : null}
+
       {canReturnToPdf && (
         <div className="flex shrink-0 items-center justify-end border-b bg-muted/20 px-2 py-1">
           <Button
@@ -78,7 +94,11 @@ export function PreviewPanel() {
         ) : activeView === "pdf" && pdfSrc ? (
           <PdfViewer src={pdfSrc} title="Compiled PDF preview" />
         ) : (
-          <PreviewEmptyState isBusy={isBusy} />
+          <PreviewEmptyState
+            isBusy={isBusy}
+            hasFailed={hasFailed}
+            reasonShownAbove={Boolean(hasFailed && message)}
+          />
         )}
       </div>
     </div>

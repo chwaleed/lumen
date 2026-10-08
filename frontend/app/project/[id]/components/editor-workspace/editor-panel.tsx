@@ -4,6 +4,7 @@ import type { editor as MonacoEditor } from "monaco-editor";
 import { PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { ImagePreview } from "./image-preview";
 import { EditorFileTabs } from "@/app/project/[id]/components/editor-file-tabs";
 import { FloatingAiChat } from "@/app/project/[id]/components/floating-ai-chat";
 import { MonacoLatexEditor } from "@/app/project/[id]/components/monaco-latex-editor";
@@ -27,24 +28,19 @@ function EditorPanelBody({
 }: Omit<EditorPanelProps, "selection">) {
   const theme = useThemeStore((state) => state.theme);
   const wordWrap = useProjectEditorHook((state) => state.wordWrap);
+  const projectId = useProjectEditorHook((state) => state.projectId);
   const projectStatus = useProjectEditorHook((state) => state.projectStatus);
   const projectErrorMessage = useProjectEditorHook((state) => state.projectErrorMessage);
 
   if (activeFile && activeFileIsImage) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/10 p-6">
-        {activeFile.fileUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={activeFile.fileUrl}
-            alt={activeFile.name}
-            className="max-h-full max-w-full rounded-md border border-border bg-background object-contain shadow-sm"
-          />
-        ) : (
-          <p className="rounded-md border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-            Image preview unavailable.
-          </p>
-        )}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ImagePreview
+          key={activeFile.id}
+          projectId={projectId}
+          fileId={activeFile.id}
+          name={activeFile.name}
+        />
       </div>
     );
   }

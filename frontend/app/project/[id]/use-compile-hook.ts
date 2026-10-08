@@ -29,6 +29,7 @@ type CompileJob = {
   error_count: number | null;
   has_pdf: boolean;
   has_log: boolean;
+  failure_reason: string | null;
 };
 
 const TERMINAL: CompileStatus[] = ["success", "failure", "timeout", "cancelled"];
@@ -43,6 +44,20 @@ function pollDelay(attempt: number) {
   return POLL_BACKOFF_MS[Math.min(attempt, POLL_BACKOFF_MS.length - 1)];
 }
 
+/**
+ * How long to keep polling before giving up on a build entirely.
+ *
+ * The server settles an abandoned job on read, so this should never fire --
+ * but "should never" is how the spinner ran for ever in the first place. It
+ * is the client's own backstop for a server that stops answering sensibly.
+ * Exported so tests can shorten it.
+ */
+export const POLL_DEADLINE_MS = { value: 15 * 60 * 1000 };
+
+// A dropped request is not a failed build. Wi-Fi blips, a dev server
+// restarts; giving up on the first one threw away a compile that was fine.
+const MAX_CONSECUTIVE_POLL_FAILURES = 4;
+
 export type PreviewView = "pdf" | "problems" | "log";
 
 export type CompileDiagnostic = {
@@ -50,6 +65,8 @@ export type CompileDiagnostic = {
   message: string;
   file: string | null;
   line: number | null;
+  // The source TeX echoed back, marked where it stopped reading.
+  context: string | null;
 };
 
 type CompileState = {
@@ -113,6 +130,9 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
     const jobId = payload.data.id;
     set({ jobId, status: payload.data.status });
 
+    const deadline = Date.now() + POLL_DEADLINE_MS.value;
+    let consecutiveFailures = 0;
+
     for (let attempt = 0; ; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, pollDelay(attempt)));
 
@@ -121,21 +141,44 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
         return;
       }
 
+      if (Date.now() > deadline) {
+        set({
+          status: "failure",
+          message:
+            "Gave up waiting for this build. It may still be running -- reload " +
+            "the page to pick it up, or start a new compile.",
+        });
+        return;
+      }
+
       const poll = await requestApi<CompileJob>(
         `/api/projects/${projectId}/compile/${jobId}`
       );
 
       if (!poll.payload.success || !poll.payload.data) {
-        set({ status: "failure", message: poll.payload.message ?? "Lost track of the compile." });
-        return;
+        consecutiveFailures += 1;
+        // A 404 means the job is gone for good; retrying cannot help.
+        const isGone = poll.status === 404;
+        if (isGone || consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+          set({
+            status: "failure",
+            message:
+              poll.payload.message ??
+              "Lost contact with the build service while waiting for this compile.",
+          });
+          return;
+        }
+        continue;
       }
 
+      consecutiveFailures = 0;
       const job = poll.payload.data;
       set({
         status: job.status,
         errorCount: job.error_count,
         durationMs: job.duration_ms,
         hasPdf: job.has_pdf,
+        message: job.failure_reason,
       });
 
       if (TERMINAL.includes(job.status)) {
