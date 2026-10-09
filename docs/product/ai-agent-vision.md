@@ -267,6 +267,26 @@ solving.
 
 ---
 
+## 10. Implementation stack, decided 2026-10-09
+
+The agent will be built on **LangChain** (1.4) and **LangGraph** (1.2), added to the
+backend when work on the agent starts. Neither is in `requirements.txt` yet.
+
+- **LangChain** for the provider abstraction and tool declarations. The value is that
+  swapping the underlying model is a configuration change rather than a rewrite, which
+  matters because §5 identifies per-task model cost as the business risk.
+- **LangGraph** for the loop itself. Section 3 above is the whole argument: the agent is
+  `edit → compile → fix`, which is a cycle with state, not a single exchange. A state
+  graph makes each step explicit, gives a natural place to enforce the per-task ceilings
+  (max compiles, tokens, wall-clock) that §4 demands, and gives a defined point to halt
+  for the diff review before any change lands.
+
+Note that §3's premise is now out of date: compilation exists, is sandboxed and is
+tested. The loop's missing middle step has been built. This section records the stack
+for the remaining two thirds of it.
+
+---
+
 *This is an engineering opinion on feasibility, not market research or a business plan.
 See [roadmap.md](roadmap.md) for the concrete gaps in the current build, and
 [requirements.md](requirements.md) — still a template — for where this vision should turn
