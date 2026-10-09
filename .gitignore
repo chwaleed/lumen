@@ -4,3 +4,9 @@
 backend/.compile/
 backend/*.db
 backend/.m2check.db
+
+# A real thesis kept here to compile against, and the PDFs it builds. Test
+# input, not product source. Both directory names end in a space -- the
+# trailing slash is what keeps git from stripping it from the pattern.
+/FYP Documentation /
+/FYP PDFs /
