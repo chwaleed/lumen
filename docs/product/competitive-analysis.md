@@ -54,25 +54,30 @@ no project limit, unlimited collaborators.** Real-time collaboration. An assista
 built into the editor: context-aware proofreading, image-to-LaTeX, zip import, and a
 **"Fix with AI"** control that repairs faults such as a figure missing from the output.
 
-**This breaks both of the claims below.** Our position was (1) compilation free and
-unlimited, and (2) AI that acts rather than advises. Prism is free and unlimited, is
-backed by OpenAI's distribution to every ChatGPT user, and its AI repairs errors rather
-than only explaining them. It also ships zip import, which we built as a differentiator.
+**Weaknesses:**
 
-What is left that is actually defensible, and it is thin:
+- **One vendor's models, permanently.** Prism is an OpenAI product and runs OpenAI
+  models. The user does not choose and cannot change. No single lab has held the lead
+  on every task for long, and the model that is best at long-document reasoning this
+  quarter may not be the one Prism is built on. A user who finds another model better
+  for their work has no route to it short of leaving.
+- **A ChatGPT account is the entry condition.** Access is tied to an account with one
+  company, which also decides the terms. OpenAI has said stronger features may move
+  behind paid plans later, so "free and unlimited" describes today's policy, not a
+  property of the product.
+- **Everything goes to one provider.** For unpublished research, a supervisor or an
+  institution may have a view about which company sees the draft, and Prism offers no
+  alternative.
+- **Repair is on request.** The assistant fixes a fault when asked. Whether it will
+  drive a build-and-fix cycle to completion under a stated ceiling is not documented.
 
-- **No vendor account required.** Prism needs a ChatGPT account; OpenAI has said more
-  capable features may move behind paid plans later, so the free terms are a decision
-  and not a guarantee.
-- **Provider independence.** LangChain abstracts the model, so ours can be replaced.
-  Prism is bound to OpenAI's models by construction.
-- **A bounded agent loop with diff review.** Prism's assistance repairs on request.
-  Ours is specified to iterate to a working build under a stated ceiling, showing every
-  change before it lands. *This distinction is unverified* — nobody here has used Prism.
-  Verify before relying on it in print.
+**Where we differ:** the model is configuration, not architecture. LangChain sits
+between the agent and the provider, so the model is chosen per deployment and can be
+replaced as better ones appear, including self-hosted and non-OpenAI models. No account
+with any particular vendor is required to use the editor.
 
-Do not write a comparison against Prism that we have not tested. Sign up, run a real
-thesis through it, and record what it actually does.
+*Unverified:* nobody here has used Prism. Sign up, run a real thesis through it, and
+record what it actually does before relying on the last point in print.
 
 ### 3. TeXPage
 
@@ -105,16 +110,18 @@ many files, run the build, read the failure and iterate. **Prism is the first to
 
 ## Our position
 
-**Both original claims are now contested by Prism, which is free, unlimited and backed
-by OpenAI.** What remains:
+Three claims, in the order they should be made:
 
-1. **Compilation is free and unlimited.** Still true, no longer distinctive. It answers
-   Overleaf and TeXPage; it does not answer Prism.
-2. **The agent closes the loop rather than advising on it.** Still the strongest claim,
-   but it must now be stated against Prism's "Fix with AI" rather than against
-   Overleaf's suggest-only assistant, and the difference has not been measured.
-3. **No dependence on one model vendor.** New, and the clearest remaining separation:
-   no ChatGPT account required, and the provider is swappable behind LangChain.
+1. **Any model, chosen per deployment.** The agent talks to the provider through
+   LangChain, so the model is a setting rather than a design decision. As the frontier
+   moves, the system follows it. Prism cannot: it is OpenAI's product running OpenAI's
+   models, and the user has no say. This is the clearest separation and should lead.
+2. **The agent closes the loop rather than advising on it.** It lists and reads files,
+   writes changes, starts a compile, reads the parsed log, and iterates under a stated
+   ceiling until the document builds, showing every change as a diff first. State this
+   against Prism's repair-on-request, not against Overleaf's suggest-only assistant.
+3. **Compilation is free and unlimited.** Answers Overleaf and TeXPage squarely.
+   Against Prism it is parity, not advantage, so do not lead with it.
 
 Supporting, not leading: parsed errors that link to the source line including inside an
 `\input`-ed subfile, and a sandboxed compiler (no network, CPU/memory/PID/wall-clock
@@ -122,9 +129,9 @@ capped) so untrusted documents cannot reach the host.
 
 ## Risks to this position, stated honestly
 
-- **OpenAI already built one.** Prism shipped in January 2026, free, with no compile
-  ceiling. This is no longer a hypothetical competitor response; it has happened, and it
-  happened before this product reached its own agent.
+- **OpenAI is in this market.** Prism shipped January 2026 with no compile ceiling and
+  ChatGPT's distribution behind it. Competing on free compilation alone will not work;
+  model independence and the agent loop are what the argument has to rest on.
 - **Overleaf can build an agent too.** They have 20M users, the money and the head
   start. Our defence is focus and speed, not a moat.
 - **Our agent is not built yet.** The tool loop, compile-fix iteration, multi-file
