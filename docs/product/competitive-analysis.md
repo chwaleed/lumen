@@ -1,6 +1,6 @@
 # Competitive analysis
 
-**Status:** current as of 2026-10-09. Figures taken from vendors' own pages on that date.
+**Status:** current as of 2026-10-11. Figures taken from vendors' own pages on that date.
 
 Why this file exists: "why build this when Overleaf exists" is the first question an
 examiner, an investor or a new engineer asks, and the honest answer has moved. Overleaf
@@ -47,14 +47,32 @@ and reads every resulting error.
 - **The assistant is turn-based.** It cannot create a file, wire it in with `\input`,
   compile, read the log and correct itself. That loop is the actual work.
 
-### 2. Papeeria
+### 2. Prism (OpenAI) — read this one first
 
-Free tier allows unlimited public projects but only **1 active private project**; Delta
-is **$5/month** for up to 10 private projects and priority compiling, free for verified
-students. Distinctive: gnuplot plotting, Git sync, Mendeley integration.
+**Released January 2026.** Free to anyone with a ChatGPT account. **No compile limit,
+no project limit, unlimited collaborators.** Real-time collaboration. An assistant
+built into the editor: context-aware proofreading, image-to-LaTeX, zip import, and a
+**"Fix with AI"** control that repairs faults such as a figure missing from the output.
 
-Weakness: a public-by-default free tier is unusable for unpublished thesis work, and
-there is no AI assistance of substance.
+**This breaks both of the claims below.** Our position was (1) compilation free and
+unlimited, and (2) AI that acts rather than advises. Prism is free and unlimited, is
+backed by OpenAI's distribution to every ChatGPT user, and its AI repairs errors rather
+than only explaining them. It also ships zip import, which we built as a differentiator.
+
+What is left that is actually defensible, and it is thin:
+
+- **No vendor account required.** Prism needs a ChatGPT account; OpenAI has said more
+  capable features may move behind paid plans later, so the free terms are a decision
+  and not a guarantee.
+- **Provider independence.** LangChain abstracts the model, so ours can be replaced.
+  Prism is bound to OpenAI's models by construction.
+- **A bounded agent loop with diff review.** Prism's assistance repairs on request.
+  Ours is specified to iterate to a working build under a stated ceiling, showing every
+  change before it lands. *This distinction is unverified* — nobody here has used Prism.
+  Verify before relying on it in print.
+
+Do not write a comparison against Prism that we have not tested. Sign up, run a real
+thesis through it, and record what it actually does.
 
 ### 3. TeXPage
 
@@ -83,18 +101,20 @@ All four leave the same loop to the human:
 
 For a 40-file thesis this loop is most of the work, and it is precisely the loop that
 software development automated years ago. Claude Code, Cursor and similar tools edit
-many files, run the build, read the failure and iterate. **Nothing does that for LaTeX.**
+many files, run the build, read the failure and iterate. **Prism is the first to come close, and it is three months old.**
 
 ## Our position
 
-Two claims, both narrow enough to defend:
+**Both original claims are now contested by Prism, which is free, unlimited and backed
+by OpenAI.** What remains:
 
-1. **Compilation is free and unlimited.** Not a trial, not metered. This is the
-   acquisition feature and it directly answers the one limit free users actually hit.
-2. **The agent closes the loop rather than advising on it.** It lists and reads files,
-   writes changes, starts a compile, reads the parsed log, and iterates until the
-   document builds. Overleaf's AI suggests; ours acts, with every change shown as a diff
-   before it lands and every edit revertable through append-only snapshots.
+1. **Compilation is free and unlimited.** Still true, no longer distinctive. It answers
+   Overleaf and TeXPage; it does not answer Prism.
+2. **The agent closes the loop rather than advising on it.** Still the strongest claim,
+   but it must now be stated against Prism's "Fix with AI" rather than against
+   Overleaf's suggest-only assistant, and the difference has not been measured.
+3. **No dependence on one model vendor.** New, and the clearest remaining separation:
+   no ChatGPT account required, and the provider is swappable behind LangChain.
 
 Supporting, not leading: parsed errors that link to the source line including inside an
 `\input`-ed subfile, and a sandboxed compiler (no network, CPU/memory/PID/wall-clock
@@ -102,8 +122,11 @@ capped) so untrusted documents cannot reach the host.
 
 ## Risks to this position, stated honestly
 
-- **Overleaf can build an agent.** They have the users, the money and the head start.
-  Our defence is focus and speed, not a moat.
+- **OpenAI already built one.** Prism shipped in January 2026, free, with no compile
+  ceiling. This is no longer a hypothetical competitor response; it has happened, and it
+  happened before this product reached its own agent.
+- **Overleaf can build an agent too.** They have 20M users, the money and the head
+  start. Our defence is focus and speed, not a moat.
 - **Our agent is not built yet.** The tool loop, compile-fix iteration, multi-file
   editing and diff review are all unbuilt as of this date. Until they ship, the product
   is a competent free editor and the differentiator is a plan.
@@ -120,5 +143,6 @@ capped) so untrusted documents cannot reach the host.
 - Overleaf AI features documentation — https://docs.overleaf.com/integrations-and-add-ons/ai-features
 - Overleaf compile timeouts — https://docs.overleaf.com/troubleshooting-and-support/fixing-and-preventing-compile-timeouts
 - Digital Science, AI writing tools for 20M+ Overleaf users (June 2025) — https://www.digital-science.com/blog/2025/06/digital-science-launches-new-cutting-edge-ai-writing-tools-for-20-million-overleaf-users/
-- Papeeria — https://papeeria.com/
+- Prism (OpenAI) — https://openai.com/prism/ and https://openai.com/index/introducing-prism/
+- Prism capability summary, HKUST Library (Jan 2026 release) — https://library.hkust.edu.hk/news-events/news/prism-new-ai-latex-editor-academic-writing
 - TeXPage figures via comparison surveys; verify against https://www.texpage.com before citing in print
