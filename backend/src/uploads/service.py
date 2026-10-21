@@ -1,8 +1,5 @@
 from pathlib import PurePath
-from urllib.parse import quote
 
-import boto3
-from botocore.config import Config
 from fastapi import status
 from sqlmodel import Session, func, select
 
@@ -10,6 +7,7 @@ from src.auth.models import User
 from src.core.config import Settings
 from src.file_entries.models import FileEntry
 from src.shared.project_access import clean_name, get_project_for_user, projects_exception
+from src.shared.s3 import object_url, s3_client
 from src.uploads.schemas import PresignedUploadRequest, PresignedUploadResponse
 
 # Extension-driven, not MIME-driven: browsers report "" or text/plain for .sty,
@@ -47,11 +45,6 @@ def _safe_file_name(file_name: str) -> str:
     if cleaned_name in {".", ".."}:
         raise projects_exception("File name cannot be empty.", status.HTTP_400_BAD_REQUEST)
     return cleaned_name
-
-
-def object_url(bucket_name: str, object_key: str) -> str:
-    encoded_key = quote(object_key, safe="/")
-    return f"https://{bucket_name}.s3.amazonaws.com/{encoded_key}"
 
 
 def _content_type_for(file_name: str) -> str:
@@ -108,12 +101,10 @@ def create_presigned_upload(
 
     object_key = f"uploads/{project.id}/{file_name}"
 
-    s3_client = boto3.client(
-        "s3",
-        region_name=settings.s3_region,
-        config=Config(signature_version="s3v4"),
-    )
-    upload_url = s3_client.generate_presigned_url(
+    # Signed with the browser-facing endpoint: the client PUTs to this URL
+    # directly, and a presigned URL signs its own Host header.
+    client = s3_client(settings, for_signing=True)
+    upload_url = client.generate_presigned_url(
         "put_object",
         Params={
             "Bucket": settings.s3_bucket_name,
@@ -128,7 +119,7 @@ def create_presigned_upload(
 
     return PresignedUploadResponse(
         upload_url=upload_url,
-        file_url=object_url(settings.s3_bucket_name, object_key),
+        file_url=object_url(settings, object_key),
         object_key=object_key,
         headers={"Content-Type": content_type},
     )

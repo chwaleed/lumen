@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from pathlib import PurePosixPath
-from urllib.parse import unquote, urlparse
 
 from sqlmodel import Session, select
 
@@ -16,6 +15,7 @@ from src.core.config import Settings
 from src.file_entries.models import FileEntry
 from src.file_snapshots.service import get_latest_file_snapshot
 from src.projects.models import Project
+from src.shared.s3 import object_key_from_url, s3_client
 
 # File names come from users and end up as path components on the compile
 # worker's disk, so this is a trust boundary. Anything that could escape the
@@ -64,12 +64,10 @@ def project_source_paths(session: Session, project: Project) -> list[tuple[FileE
 
 def fetch_uploaded_bytes(file_url: str, settings: Settings) -> bytes:
     """Read an uploaded asset back out of S3 by the URL stored on the entry."""
-    import boto3  # imported lazily: text-only projects need no AWS
-
-    key = unquote(urlparse(file_url).path).lstrip("/")
-    if not key:
+    key = object_key_from_url(file_url, settings)
+    if key is None:
         raise ProjectFilesError(f"Cannot derive an object key from {file_url!r}")
-    body = boto3.client("s3", region_name=settings.s3_region).get_object(
+    body = s3_client(settings).get_object(
         Bucket=settings.s3_bucket_name, Key=key
     )["Body"]
     return body.read()

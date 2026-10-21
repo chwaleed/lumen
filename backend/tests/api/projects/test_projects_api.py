@@ -207,7 +207,9 @@ def test_presigned_upload_url_uses_project_scoped_s3_key(
         captured_params["client_kwargs"] = kwargs
         return FakeS3Client()
 
-    monkeypatch.setattr("src.uploads.service.boto3.client", fake_boto3_client)
+    # Patched where the client is built, not where it is used: every call site
+    # routes through src.shared.s3 now.
+    monkeypatch.setattr("boto3.client", fake_boto3_client)
 
     upload_response = project_client.post(
         "/uploads/presigned-url",

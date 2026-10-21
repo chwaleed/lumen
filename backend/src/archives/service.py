@@ -27,7 +27,8 @@ from src.file_snapshots.service import create_file_snapshot
 from src.projects.models import Project
 from src.shared.project_access import clean_name
 from src.shared.project_files import entry_bytes, project_source_paths
-from src.uploads.service import ALLOWED_EXTENSIONS, object_url
+from src.shared.s3 import object_url, s3_client
+from src.uploads.service import ALLOWED_EXTENSIONS
 
 # Finder adds these to every zip made from the context menu, and no user means
 # to import them.
@@ -261,11 +262,10 @@ def _decode(data: bytes) -> str:
 
 
 def _put_asset(key: str, data: bytes, content_type: str, settings: Settings) -> None:
-    import boto3  # lazily, so importing a text-only project needs no AWS
     from botocore.exceptions import BotoCoreError, ClientError
 
     try:
-        boto3.client("s3", region_name=settings.s3_region).put_object(
+        s3_client(settings).put_object(
             Bucket=settings.s3_bucket_name,
             Key=key,
             Body=data,
@@ -368,7 +368,7 @@ def import_project(
             name=archive_entry.name,
             type="file",
             mime_type=content_type,
-            file_url=object_url(settings.s3_bucket_name, object_key),
+            file_url=object_url(settings, object_key),
             size_bytes=len(archive_entry.data),
         )
         session.add(entry)

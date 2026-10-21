@@ -20,6 +20,23 @@ TEST_S3_BUCKET = "test-bucket"
 TEST_S3_REGION = "us-east-1"
 
 
+@pytest.fixture(autouse=True)
+def _neutralise_object_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's own .env out of what the suite asserts.
+
+    Settings reads the repository .env, so once that pointed at the local
+    s3proxy every assertion about an AWS URL started failing on a working tree
+    and passing in CI. Autouse rather than part of the `settings` fixture
+    because tests also construct Settings directly, and an explicit environment
+    variable outranks the .env file. Init keyword arguments still outrank this,
+    so a test can opt back in to a custom endpoint by passing one.
+    """
+    monkeypatch.setenv("S3_ENDPOINT_URL", "")
+    monkeypatch.setenv("S3_PUBLIC_ENDPOINT_URL", "")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+
+
 @pytest.fixture()
 def database_url(tmp_path: Path) -> Iterator[str]:
     """An isolated SQLite URL, with its engine disposed afterwards."""

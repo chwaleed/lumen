@@ -57,6 +57,30 @@ class Settings(BaseSettings):
         default=900,
         alias="S3_PRESIGNED_URL_EXPIRES_SECONDS",
     )
+    # Unset means real AWS. Set, it points at an S3-compatible service such as
+    # MinIO, which is how local development gets working uploads without AWS
+    # credentials. Addressing switches to path style when this is set, because
+    # MinIO has no wildcard DNS to serve bucket.host style names.
+    s3_endpoint_url: str | None = Field(default=None, alias="S3_ENDPOINT_URL")
+    # The same service as seen FROM THE BROWSER. A presigned URL signs its own
+    # Host header, so the name the server signs with has to be the name the
+    # browser connects to -- and in compose those differ: the API reaches MinIO
+    # at http://minio:9000, the browser only at http://localhost:9100. Defaults
+    # to s3_endpoint_url when the two are the same.
+    s3_public_endpoint_url: str | None = Field(
+        default=None,
+        alias="S3_PUBLIC_ENDPOINT_URL",
+    )
+    # Read through Settings rather than left to boto3's own environment lookup,
+    # which never sees .env: the compile worker runs as a plain host process, so
+    # boto3 found no credentials and every figure read failed even though .env
+    # had them. Unset falls back to boto3's chain, which is what lets a
+    # production deployment use an IAM role and no keys at all.
+    aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(
+        default=None,
+        alias="AWS_SECRET_ACCESS_KEY",
+    )
     # Uploads are untrusted input that the compiler then executes, and they land
     # on the compile worker's disk. Generous by default; tighten only if abused.
     upload_max_file_bytes: int = Field(default=25 * 1024 * 1024, alias="UPLOAD_MAX_FILE_BYTES")
