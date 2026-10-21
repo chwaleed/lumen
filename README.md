@@ -30,6 +30,9 @@ Then open <http://localhost:3000>. Sign up and you land straight in the dashboar
 - Changed `requirements.txt`? `docker compose up -d --build backend`.
 - API docs are served at <http://localhost:9000/docs>.
 - Adminer at <http://localhost:8080> (server `postgres`) for a look at the database.
+- **Compile does not work from the above alone** — the queue has nothing draining it.
+  See [SETUP.md](SETUP.md) for the full fresh-machine sequence, including the TeX
+  image and the compile worker.
 
 ## Layout
 
