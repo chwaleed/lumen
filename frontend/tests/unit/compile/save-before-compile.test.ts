@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
-import { resetAxiosMock, respondWithApi, requestedUrls } from "../support/axios-mock";
+import { resetAxiosMock, respondWithApi, requestedUrls, axiosRequest } from "../support/axios-mock";
 import { POLL_DEADLINE_MS, useCompileHook } from "@/app/project/[id]/use-compile-hook";
 import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 
@@ -16,7 +16,6 @@ function buffers(open: Record<string, string>, onServer: Record<string, string>)
     fileContents: open,
     savedFileContents: onServer,
     snapshotVersions: Object.fromEntries(Object.keys(open).map((id) => [id, 1])),
-    pendingSnapshotChanges: {},
   });
 }
 
@@ -65,5 +64,24 @@ describe("compile saves before it builds", () => {
 
     expect(requestedUrls().some((url) => url.endsWith("/compile"))).toBe(false);
     expect(useCompileHook.getState().status).toBe("failure");
+  });
+
+  // The old incremental path recorded a range against whichever file was active
+  // when the editor reported it, so an offset from one document could be sent
+  // against another -- which the API rejects with "Invalid editor change range"
+  // and which no retry could clear. A full-range replacement cannot drift.
+  it("replaces exactly the span the server is known to hold", async () => {
+    buffers({ "1": "new text that is much longer than before" }, { "1": "old" });
+    respondWithApi(200, { success: true, data: { content: "x", version: 2 } });
+
+    await useCompileHook.getState().compile("9");
+
+    const save = axiosRequest.mock.calls
+      .map(([config]) => config)
+      .find((config) => String(config?.url ?? "").includes("/snapshots"));
+    expect(save?.data).toMatchObject({
+      base_version: 1,
+      changes: [{ range_offset: 0, range_length: "old".length, text: "new text that is much longer than before" }],
+    });
   });
 });

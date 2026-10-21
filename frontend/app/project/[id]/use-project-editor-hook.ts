@@ -26,91 +26,6 @@ export type EditorFile = {
   fileUrl?: string | null;
 };
 
-export type PendingSnapshotChange = {
-  range_offset: number;
-  range_length: number;
-  text: string;
-};
-
-function mergePendingSnapshotChange(
-  previous: PendingSnapshotChange,
-  next: PendingSnapshotChange
-): PendingSnapshotChange | null {
-  const previousIsInsert = previous.range_length === 0 && previous.text.length > 0;
-  const nextIsInsert = next.range_length === 0 && next.text.length > 0;
-
-  if (previousIsInsert && nextIsInsert) {
-    const previousEndOffset = previous.range_offset + previous.text.length;
-
-    if (next.range_offset === previousEndOffset) {
-      return {
-        range_offset: previous.range_offset,
-        range_length: 0,
-        text: `${previous.text}${next.text}`,
-      };
-    }
-  }
-
-  const previousIsDelete = previous.range_length > 0 && previous.text.length === 0;
-  const nextIsDelete = next.range_length > 0 && next.text.length === 0;
-
-  if (previousIsDelete && nextIsDelete) {
-    if (next.range_offset === previous.range_offset) {
-      return {
-        range_offset: previous.range_offset,
-        range_length: previous.range_length + next.range_length,
-        text: "",
-      };
-    }
-
-    if (next.range_offset + next.range_length === previous.range_offset) {
-      return {
-        range_offset: next.range_offset,
-        range_length: previous.range_length + next.range_length,
-        text: "",
-      };
-    }
-  }
-
-  const previousIsReplace = previous.range_length > 0 && previous.text.length > 0;
-  const nextIsReplace = next.range_length > 0 && next.text.length > 0;
-
-  if (previousIsReplace && nextIsReplace) {
-    const previousEndOffset = previous.range_offset + previous.text.length;
-
-    if (next.range_offset === previousEndOffset) {
-      return {
-        range_offset: previous.range_offset,
-        range_length: previous.range_length + next.range_length,
-        text: `${previous.text}${next.text}`,
-      };
-    }
-  }
-
-  return null;
-}
-
-function compactPendingSnapshotChanges(changes: PendingSnapshotChange[]) {
-  return changes.reduce<PendingSnapshotChange[]>((accumulator, change) => {
-    const previous = accumulator.at(-1);
-
-    if (!previous) {
-      accumulator.push(change);
-      return accumulator;
-    }
-
-    const mergedChange = mergePendingSnapshotChange(previous, change);
-
-    if (!mergedChange) {
-      accumulator.push(change);
-      return accumulator;
-    }
-
-    accumulator[accumulator.length - 1] = mergedChange;
-    return accumulator;
-  }, []);
-}
-
 type LoadStatus = "idle" | "loading" | "loaded" | "error";
 
 type CreateEntryType = "file" | "folder";
@@ -138,7 +53,6 @@ type ProjectEditorState = {
   activeFileId: string | null;
   fileContents: Record<string, string>;
   savedFileContents: Record<string, string>;
-  pendingSnapshotChanges: Record<string, PendingSnapshotChange[]>;
   snapshotVersions: Record<string, number>;
   isAiChatExpanded: boolean;
   aiChatPrompt: string;
@@ -165,7 +79,6 @@ type ProjectEditorState = {
   closeFile: (fileId: string) => void;
   setActiveFile: (fileId: string) => void;
   setActiveFileContent: (value: string) => void;
-  appendPendingSnapshotChanges: (fileId: string, changes: PendingSnapshotChange[]) => void;
   setFileContent: (fileId: string, value: string) => void;
   setFileSnapshotVersion: (fileId: string, version: number) => void;
   saveActiveFile: () => Promise<boolean>;
@@ -281,15 +194,6 @@ function removeFileContents(fileContents: Record<string, string>, entryIds: Set<
   );
 }
 
-function removePendingSnapshotChanges(
-  pendingSnapshotChanges: Record<string, PendingSnapshotChange[]>,
-  entryIds: Set<string>
-) {
-  return Object.fromEntries(
-    Object.entries(pendingSnapshotChanges).filter(([fileId]) => !entryIds.has(fileId))
-  );
-}
-
 function removeSnapshotVersions(snapshotVersions: Record<string, number>, entryIds: Set<string>) {
   return Object.fromEntries(
     Object.entries(snapshotVersions).filter(([fileId]) => !entryIds.has(fileId))
@@ -322,7 +226,6 @@ function initializeProjectState(project: ProjectDetail) {
     activeFileId: initialFile ? String(initialFile.id) : null,
     fileContents,
     savedFileContents,
-    pendingSnapshotChanges: {},
     snapshotVersions,
   };
 }
@@ -343,7 +246,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
   activeFileId: null,
   fileContents: {},
   savedFileContents: {},
-  pendingSnapshotChanges: {},
   snapshotVersions: {},
   isAiChatExpanded: false,
   aiChatPrompt: "",
@@ -469,10 +371,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
             ...state.savedFileContents,
             [fileId]: newEntry.content ?? "",
           },
-          pendingSnapshotChanges: {
-            ...state.pendingSnapshotChanges,
-            [fileId]: [],
-          },
           snapshotVersions: {
             ...state.snapshotVersions,
             [fileId]: newEntry.snapshot_version ?? 0,
@@ -493,10 +391,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         savedFileContents: {
           ...state.savedFileContents,
           [fileId]: newEntry.content ?? "",
-        },
-        pendingSnapshotChanges: {
-          ...state.pendingSnapshotChanges,
-          [fileId]: [],
         },
         snapshotVersions: {
           ...state.snapshotVersions,
@@ -591,10 +485,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       savedFileContents: {
         ...state.savedFileContents,
         [String(newEntry.id)]: newEntry.content ?? "",
-      },
-      pendingSnapshotChanges: {
-        ...state.pendingSnapshotChanges,
-        [String(newEntry.id)]: [],
       },
       snapshotVersions: {
         ...state.snapshotVersions,
@@ -720,7 +610,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         activeFileId: isActiveFileDeleted ? (nextOpenFiles.at(-1)?.id ?? null) : state.activeFileId,
         fileContents: removeFileContents(state.fileContents, deletedEntryIds),
         savedFileContents: removeFileContents(state.savedFileContents, deletedEntryIds),
-        pendingSnapshotChanges: removePendingSnapshotChanges(state.pendingSnapshotChanges, deletedEntryIds),
         snapshotVersions: removeSnapshotVersions(state.snapshotVersions, deletedEntryIds),
         projectErrorMessage: null,
       };
@@ -768,17 +657,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
         },
       };
     }),
-  appendPendingSnapshotChanges: (fileId, changes) =>
-    set((state) => {
-      const existingChanges = state.pendingSnapshotChanges[fileId] ?? [];
-
-      return {
-        pendingSnapshotChanges: {
-          ...state.pendingSnapshotChanges,
-          [fileId]: compactPendingSnapshotChanges([...existingChanges, ...changes]),
-        },
-      };
-    }),
   setFileContent: (fileId, value) =>
     set((state) => ({
       fileContents: {
@@ -801,35 +679,35 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
   // several files can be dirty at once -- which for a multi-file document is
   // the normal case, not an edge one.
   saveFile: async (fileId) => {
-    const { fileContents, savedFileContents, pendingSnapshotChanges, snapshotVersions, projectId } = get();
+    const { fileContents, savedFileContents, snapshotVersions, projectId } = get();
     if (!projectId || !fileId) {
       return false;
     }
 
     const content = fileContents[fileId] ?? "";
     const savedContent = savedFileContents[fileId] ?? "";
-    const changes = pendingSnapshotChanges[fileId] ?? [];
     const baseVersion = snapshotVersions[fileId] ?? 0;
 
     if (content === savedContent) {
       return true;
     }
 
+    // One full-range replacement rather than the editor's own incremental
+    // ranges. base_version proves the server still holds savedContent -- it is
+    // written from the same response that set this version -- so replacing
+    // exactly that span is correct by construction.
+    //
+    // The incremental path was not: a change was recorded against whichever
+    // file was active when the editor reported it, so an offset computed in one
+    // document could be replayed against another. Any file that happened to
+    // collect one was then stuck rejecting every save with "Invalid editor
+    // change range", and no amount of retrying cleared it.
     const { status, payload } = await postApi<{
       content: string;
       version: number;
     }>(`/api/projects/${projectId}/files/${fileId}/snapshots`, {
       base_version: baseVersion,
-      changes:
-        changes.length > 0
-          ? changes
-          : [
-              {
-                range_offset: 0,
-                range_length: savedContent.length,
-                text: content,
-              },
-            ],
+      changes: [{ range_offset: 0, range_length: savedContent.length, text: content }],
     });
 
     if (status < 200 || status >= 300 || !payload.success || !payload.data) {
@@ -847,10 +725,6 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       savedFileContents: {
         ...state.savedFileContents,
         [fileId]: payload.data?.content ?? content,
-      },
-      pendingSnapshotChanges: {
-        ...state.pendingSnapshotChanges,
-        [fileId]: [],
       },
       snapshotVersions: {
         ...state.snapshotVersions,

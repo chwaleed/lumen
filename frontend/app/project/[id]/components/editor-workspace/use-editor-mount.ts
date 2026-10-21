@@ -57,23 +57,18 @@ export function useEditorMount({ onClearSelection, onShowSelection }: UseEditorM
       });
       findWidgetObserverRef.current = observer;
 
+      // Only the resulting text is recorded, not the individual ranges. This
+      // handler sees whichever file is active when it fires, so a range
+      // computed in one document could be attributed to another and would then
+      // be replayed against the wrong content. Saving sends the whole buffer.
       editor.onDidChangeModelContent((event) => {
-        const { activeFileId, setFileContent, appendPendingSnapshotChanges } =
-          useProjectEditorHook.getState();
+        const { activeFileId, setFileContent } = useProjectEditorHook.getState();
 
         if (!activeFileId || event.isFlush) {
           return;
         }
 
         setFileContent(activeFileId, editor.getValue());
-        appendPendingSnapshotChanges(
-          activeFileId,
-          event.changes.map((change) => ({
-            range_offset: change.rangeOffset,
-            range_length: change.rangeLength,
-            text: change.text,
-          })),
-        );
       });
 
       editor.onMouseDown((event) => {

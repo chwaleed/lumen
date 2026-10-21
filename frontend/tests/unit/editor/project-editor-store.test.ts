@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import {
-  useProjectEditorHook,
-  type PendingSnapshotChange,
-} from "@/app/project/[id]/use-project-editor-hook";
+import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 
 // The store is a module singleton, so each test starts from a known state.
 const INITIAL_STATE = useProjectEditorHook.getState();
@@ -225,82 +222,3 @@ describe("AI chat prompt history", () => {
   });
 });
 
-// Monaco emits one change per keystroke; these are coalesced before being sent
-// to the snapshot API, so the wire traffic is a fraction of the edit events.
-describe("pending snapshot change compaction", () => {
-  const append = (changes: PendingSnapshotChange[]) =>
-    store().appendPendingSnapshotChanges("a", changes);
-  const pending = () => store().pendingSnapshotChanges.a;
-
-  const insert = (offset: number, text: string) => ({
-    range_offset: offset,
-    range_length: 0,
-    text,
-  });
-  const remove = (offset: number, length: number) => ({
-    range_offset: offset,
-    range_length: length,
-    text: "",
-  });
-
-  test("merges consecutive typed characters into one insert", () => {
-    append([insert(0, "a"), insert(1, "b"), insert(2, "c")]);
-
-    expect(pending()).toEqual([insert(0, "abc")]);
-  });
-
-  test("merges across separate append calls", () => {
-    append([insert(0, "a")]);
-    append([insert(1, "b")]);
-
-    expect(pending()).toEqual([insert(0, "ab")]);
-  });
-
-  test("keeps inserts at unrelated offsets separate", () => {
-    append([insert(0, "a"), insert(50, "z")]);
-
-    expect(pending()).toEqual([insert(0, "a"), insert(50, "z")]);
-  });
-
-  test("merges forward deletes at the same offset", () => {
-    append([remove(5, 1), remove(5, 1)]);
-
-    expect(pending()).toEqual([remove(5, 2)]);
-  });
-
-  // Backspace walks the offset backwards, so the merged range starts earlier.
-  test("merges backspaces into one widening delete", () => {
-    append([remove(5, 1), remove(4, 1)]);
-
-    expect(pending()).toEqual([remove(4, 2)]);
-  });
-
-  test("keeps deletes at unrelated offsets separate", () => {
-    append([remove(5, 1), remove(20, 1)]);
-
-    expect(pending()).toEqual([remove(5, 1), remove(20, 1)]);
-  });
-
-  test("merges adjacent replacements", () => {
-    append([
-      { range_offset: 0, range_length: 2, text: "xy" },
-      { range_offset: 2, range_length: 3, text: "z" },
-    ]);
-
-    expect(pending()).toEqual([{ range_offset: 0, range_length: 5, text: "xyz" }]);
-  });
-
-  test("does not merge an insert with a delete", () => {
-    append([insert(0, "a"), remove(1, 1)]);
-
-    expect(pending()).toHaveLength(2);
-  });
-
-  test("tracks each file's changes separately", () => {
-    store().appendPendingSnapshotChanges("a", [insert(0, "a")]);
-    store().appendPendingSnapshotChanges("b", [insert(0, "b")]);
-
-    expect(store().pendingSnapshotChanges.a).toEqual([insert(0, "a")]);
-    expect(store().pendingSnapshotChanges.b).toEqual([insert(0, "b")]);
-  });
-});
