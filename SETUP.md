@@ -195,6 +195,55 @@ they define the folder layout, the `@backend` tag and the screenshot-as-proof ru
 
 ---
 
+## Troubleshooting
+
+### Compile says "Could not start the compile", and images will not load
+
+If both break at once, suspect the **frontend dev server**, not storage. The
+symptom is that every proxy route nested below `[id]` returns a 404 HTML page
+while the shallower ones still answer JSON:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' http://localhost:3000/api/projects/1
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -X POST http://localhost:3000/api/projects/1/compile
+```
+
+A `404 text/html` on the second with a `200 application/json` on the first means
+the dev server's route table is stale, which has happened after a Next version
+change. The 404 is HTML, so the client reads no `message` field and falls back to
+its generic wording -- which is why the error names neither the route nor the
+status. Confirm the backend is fine first, then rebuild the route table:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' localhost:9000/docs   # 200 = backend fine
+# then, in the frontend terminal: Ctrl-C
+rm -rf frontend/.next && cd frontend && bun dev
+```
+
+Check for a leftover `next-server` on an older version at the same time
+(`ps -eo pid,etime,cmd | grep next-server`); one lingered through a downgrade here.
+
+### Compile spins forever
+
+Nothing is draining the queue. The worker is not part of compose -- see Stage 3.
+Confirm with `ps -eo pid,cmd | grep compiles.worker`, and check for rows stuck in
+`queued`:
+
+```bash
+docker exec lumen-postgres psql -U postgres -d lumen -c \
+  "SELECT id, status FROM compile_jobs ORDER BY id DESC LIMIT 5;"
+```
+
+### "could not be stored. File storage is unavailable."
+
+boto3 has no credentials, or the endpoint points at something that is not
+running. Both endpoint variables and the placeholder keys must be set as
+`.env.example` has them; see *Object storage*. A stale `AWS_ENDPOINT_URL_S3` left
+in `.env` from an older local setup will also cause this, and it overrides
+nothing visible in the error.
+
+---
+
 ## Host-specific notes
 
 ### Snap-installed Docker
