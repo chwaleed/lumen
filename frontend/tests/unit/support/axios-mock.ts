@@ -12,10 +12,13 @@ import { mock } from "bun:test";
 
 export type MockedResponse = { status: number; data: unknown };
 
+/** What the client passes to axios. Typed so a test can assert on the URL. */
+export type MockedRequest = { url?: string; method?: string; data?: unknown };
+
 let nextResponse: MockedResponse | Error = { status: 200, data: null };
 let queue: Array<MockedResponse | Error> = [];
 
-export const axiosRequest = mock(async () => {
+export const axiosRequest = mock(async (_config: MockedRequest = {}) => {
   const response = queue.length > 0 ? queue.shift()! : nextResponse;
   if (response instanceof Error) {
     throw response;
@@ -26,6 +29,11 @@ export const axiosRequest = mock(async () => {
 mock.module("axios", () => ({
   default: { create: () => ({ request: axiosRequest }) },
 }));
+
+/** The URLs requested so far, in order. */
+export function requestedUrls(): string[] {
+  return axiosRequest.mock.calls.map(([config]) => config?.url ?? "");
+}
 
 /** Queues what the next axios call resolves to (or throws). */
 export function respondWith(response: MockedResponse | Error) {

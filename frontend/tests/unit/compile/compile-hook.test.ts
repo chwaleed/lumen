@@ -10,9 +10,11 @@ import {
   POLL_DEADLINE_MS,
   useCompileHook,
 } from "@/app/project/[id]/use-compile-hook";
+import { useProjectEditorHook } from "@/app/project/[id]/use-project-editor-hook";
 
 const ORIGINAL_BACKOFF = [...POLL_BACKOFF_MS];
 const ORIGINAL_DEADLINE = POLL_DEADLINE_MS.value;
+const EDITOR_INITIAL = useProjectEditorHook.getState();
 
 function job(overrides: Record<string, unknown> = {}) {
   return {
@@ -32,6 +34,10 @@ describe("useCompileHook", () => {
   beforeEach(() => {
     resetAxiosMock();
     useCompileHook.getState().reset();
+    // compile() flushes unsaved buffers first, so a dirty editor store left by
+    // another file would insert save requests ahead of the responses queued
+    // below. Both stores are module singletons.
+    useProjectEditorHook.setState(EDITOR_INITIAL, true);
     // Keep the suite fast: the real backoff starts at 400ms.
     POLL_BACKOFF_MS.splice(0, POLL_BACKOFF_MS.length, ...ORIGINAL_BACKOFF.map(() => 1));
     POLL_DEADLINE_MS.value = ORIGINAL_DEADLINE;

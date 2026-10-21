@@ -169,6 +169,8 @@ type ProjectEditorState = {
   setFileContent: (fileId: string, value: string) => void;
   setFileSnapshotVersion: (fileId: string, version: number) => void;
   saveActiveFile: () => Promise<boolean>;
+  saveFile: (fileId: string) => Promise<boolean>;
+  saveDirtyFiles: () => Promise<boolean>;
   cutSelection: () => Promise<void>;
   copySelection: () => Promise<void>;
   pasteSelection: () => Promise<void>;
@@ -792,15 +794,22 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
       },
     })),
   saveActiveFile: async () => {
-    const { activeFileId, fileContents, savedFileContents, pendingSnapshotChanges, snapshotVersions, projectId } = get();
-    if (!projectId || !activeFileId) {
+    const { activeFileId } = get();
+    return activeFileId ? get().saveFile(activeFileId) : false;
+  },
+  // Saves any file, not just the open one. Switching tabs does not persist, so
+  // several files can be dirty at once -- which for a multi-file document is
+  // the normal case, not an edge one.
+  saveFile: async (fileId) => {
+    const { fileContents, savedFileContents, pendingSnapshotChanges, snapshotVersions, projectId } = get();
+    if (!projectId || !fileId) {
       return false;
     }
 
-    const content = fileContents[activeFileId] ?? "";
-    const savedContent = savedFileContents[activeFileId] ?? "";
-    const changes = pendingSnapshotChanges[activeFileId] ?? [];
-    const baseVersion = snapshotVersions[activeFileId] ?? 0;
+    const content = fileContents[fileId] ?? "";
+    const savedContent = savedFileContents[fileId] ?? "";
+    const changes = pendingSnapshotChanges[fileId] ?? [];
+    const baseVersion = snapshotVersions[fileId] ?? 0;
 
     if (content === savedContent) {
       return true;
@@ -809,7 +818,7 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
     const { status, payload } = await postApi<{
       content: string;
       version: number;
-    }>(`/api/projects/${projectId}/files/${activeFileId}/snapshots`, {
+    }>(`/api/projects/${projectId}/files/${fileId}/snapshots`, {
       base_version: baseVersion,
       changes:
         changes.length > 0
@@ -833,24 +842,42 @@ export const useProjectEditorHook = create<ProjectEditorState>()((set, get) => (
     set((state) => ({
       fileContents: {
         ...state.fileContents,
-        [activeFileId]: payload.data?.content ?? content,
+        [fileId]: payload.data?.content ?? content,
       },
       savedFileContents: {
         ...state.savedFileContents,
-        [activeFileId]: payload.data?.content ?? content,
+        [fileId]: payload.data?.content ?? content,
       },
       pendingSnapshotChanges: {
         ...state.pendingSnapshotChanges,
-        [activeFileId]: [],
+        [fileId]: [],
       },
       snapshotVersions: {
         ...state.snapshotVersions,
-        [activeFileId]: payload.data?.version ?? baseVersion,
+        [fileId]: payload.data?.version ?? baseVersion,
       },
       projectErrorMessage: null,
     }));
 
     return true;
+  },
+  // Every file whose buffer has drifted from what the server holds. Sequential
+  // on purpose: each save reads the version it is based on out of the store, so
+  // two in flight at once would race for the same base and one would 409.
+  saveDirtyFiles: async () => {
+    const { fileContents, savedFileContents } = get();
+    const dirty = Object.keys(fileContents).filter(
+      (fileId) => fileContents[fileId] !== (savedFileContents[fileId] ?? ""),
+    );
+
+    let allSaved = true;
+    for (const fileId of dirty) {
+      if (!(await get().saveFile(fileId))) {
+        allSaved = false;
+      }
+    }
+
+    return allSaved;
   },
   cutSelection: async () => {
     const editor = get().editorInstance;

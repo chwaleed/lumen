@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { requestApi } from "@/lib/http/client";
+import { useProjectEditorHook } from "./use-project-editor-hook";
 
 /**
  * Compile state for the project route.
@@ -157,6 +158,23 @@ export const useCompileHook = create<CompileState>()((set, get) => ({
       hasPdf: false,
       view: null,
     });
+
+    // The worker builds what the database holds, and nothing here saves on a
+    // timer or on tab switch. Without this flush, Compile silently rebuilt the
+    // last explicitly saved version and returned a PDF that looked stale for no
+    // visible reason. Every dirty file, not just the open one: a multi-file
+    // document is normally mid-edit in more than one place.
+    //
+    // After the status is set, not before, so the button is already disabled
+    // while a large save is in flight -- otherwise a second click during it
+    // would queue a duplicate build.
+    if (!(await useProjectEditorHook.getState().saveDirtyFiles())) {
+      set({
+        status: "failure",
+        message: "Your changes could not be saved, so the compile was not started.",
+      });
+      return;
+    }
 
     const { payload } = await requestApi<CompileJob>(`/api/projects/${projectId}/compile`, {
       method: "POST",
