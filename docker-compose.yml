@@ -19,6 +19,55 @@ services:
     networks:
       - lumen-net
 
+  # S3 for local development, so uploads and archive import work without AWS
+  # credentials. Published on 9100 because the API already owns 9000.
+  #
+  # s3proxy rather than MinIO: MinIO's images are no longer pullable anonymously
+  # from Docker Hub or quay.io. This one is ~200 MB, keeps objects in a volume so
+  # they survive a restart, and needs no client tooling to administer.
+  #
+  # Authorization is OFF. That is what lets the browser load a figure straight
+  # from the stored file_url with no signature, which is how a public-read S3
+  # bucket behaves in production. The cost is that a presigned URL is accepted
+  # here whatever it is signed with, so a signing bug shows up in staging rather
+  # than locally. Never run this configuration anywhere but a dev machine.
+  s3:
+    image: andrewgaul/s3proxy:4.1.1
+    container_name: lumen-s3
+    environment:
+      S3PROXY_AUTHORIZATION: none
+      JCLOUDS_PROVIDER: filesystem
+      JCLOUDS_FILESYSTEM_BASEDIR: /data
+    volumes:
+      - s3-data:/data
+    ports:
+      - "9100:80"
+    restart: unless-stopped
+    networks:
+      - lumen-net
+
+  # A missing bucket fails every upload with NoSuchBucket, and the filesystem
+  # provider starts empty. Runs once and exits. The image carries no shell tools
+  # for a healthcheck, hence the retry loop here instead of one on the service.
+  s3-init:
+    image: curlimages/curl:8.11.1
+    container_name: lumen-s3-init
+    depends_on:
+      - s3
+    # 409 is 'bucket already exists', which is success on every run after the
+    # first -- treating it as failure made the whole stack refuse to restart.
+    entrypoint: >
+      /bin/sh -c "
+      for _ in $$(seq 30); do
+        code=$$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://s3/${S3_BUCKET_NAME:-texai-bucket});
+        case \"$$code\" in 200|409) echo \"bucket ready ($$code)\"; exit 0 ;; esac;
+        sleep 1;
+      done;
+      echo \"s3 did not come up in 30s (last: $$code)\" >&2; exit 1
+      "
+    networks:
+      - lumen-net
+
   backend:
     build:
       context: ./backend
@@ -29,6 +78,14 @@ services:
     environment:
       PORT: ${BACKEND_PORT:-9000}
       POSTGRES_CONNECTION_STRING: ${POSTGRES_CONNECTION_STRING:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lumen}}
+      # Two endpoints for one service: the API reaches it over the compose
+      # network, the browser only over the published port, and a presigned URL
+      # has to be signed with the name the browser will use.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL-http://s3}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL-http://localhost:9100}
+      # Ignored by s3proxy, but boto3 refuses to sign a request without them.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-local}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-local-secret}
     command: python -m uvicorn src.main:app --host 0.0.0.0 --port ${BACKEND_PORT:-9000} --reload
     volumes:
       - ./backend:/app
@@ -37,6 +94,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - lumen-net
@@ -61,3 +120,4 @@ networks:
 
 volumes:
   postgres-data:
+  s3-data:

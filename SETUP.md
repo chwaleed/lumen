@@ -34,12 +34,11 @@ Now open `.env` and set:
   session token is signed with it, so do not ship the placeholder.
 - **`POSTGRES_PASSWORD`** — any value. It is used to create the database on first
   run, so changing it later means deleting the `postgres-data` volume.
-- **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** — needed for figure and
-  image uploads. See *Without AWS credentials* below for what breaks if you skip
-  these.
+**Leave everything else alone**, including the S3 block. You do not need an AWS
+account: compose runs an S3-compatible service locally and `.env.example` already
+points at it. See *Object storage* below.
 
-Leave everything else alone, with one host-specific exception noted under
-*Snap-installed Docker*.
+One host-specific exception is noted under *Snap-installed Docker*.
 
 Never commit `.env`. It is gitignored; keep placeholders in `.env.example`.
 
@@ -51,16 +50,20 @@ Never commit `.env`. It is gitignored; keep placeholders in `.env.example`.
 docker compose up -d
 ```
 
-That brings up three containers and runs the Alembic migrations automatically at
-API startup. Never create tables by hand.
+That brings up Postgres, object storage, the API and Adminer, and runs the Alembic
+migrations automatically at API startup. Never create tables by hand.
 
 - API — <http://localhost:9000>, docs at <http://localhost:9000/docs>
 - Adminer — <http://localhost:8080> (server `postgres`)
+- Object storage — <http://localhost:9100>
 
-Confirm it came up before moving on:
+`lumen-s3-init` creates the bucket and then exits, so **`Exited (0)` is the
+correct state for it** and not a failure. The API waits for it.
+
+Confirm things came up before moving on:
 
 ```bash
-docker compose ps                  # all three services 'running'
+docker compose ps                  # s3-init exited 0, the rest 'running'
 curl -s localhost:9000/docs -o /dev/null -w '%{http_code}\n'   # expect 200
 ```
 
@@ -121,7 +124,7 @@ a container's `site-packages`. Skip this and the worker dies on
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt     # runtime deps, plus pytest and moto
 ```
 
 A virtualenv is optional but keeps these out of your system Python. If
@@ -153,6 +156,17 @@ export POSTGRES_CONNECTION_STRING="postgresql://postgres:YOUR_PASSWORD@172.x.x.x
 The IP changes when the container is recreated, so re-read it after a
 `docker compose down`.
 
+The worker also reads figures back out of object storage, and `.env` points at
+`http://s3`, a name that only resolves inside the compose network. From the host
+it has to use the published port instead, or every compile of a project with a
+figure fails:
+
+```bash
+export S3_ENDPOINT_URL=http://localhost:9100
+```
+
+Credentials need no override; `Settings` reads those from `.env`.
+
 ### 3d. Run the worker
 
 ```bash
@@ -170,15 +184,14 @@ directory under `backend/.compile/work/`.
 ## Verifying the whole thing
 
 ```bash
-cd backend && pytest                 # backend suite; pytest is NOT in requirements.txt
-cd frontend && bun run test:unit     # logic
+cd backend && pytest                  # backend suite (needs requirements-dev.txt)
+cd frontend && bun run test:unit      # logic
 cd frontend && bun run test:e2e:local # browser flows needing no API
-cd frontend && bun run test          # everything
+cd frontend && bun run test           # everything
 ```
 
-Install pytest globally or into the venv yourself. Read
-`frontend/tests/README.md` before adding frontend tests; it defines the folder
-layout, the `@backend` tag and the screenshot-as-proof rule.
+Read `backend/tests/README.md` and `frontend/tests/README.md` before adding tests;
+they define the folder layout, the `@backend` tag and the screenshot-as-proof rule.
 
 ---
 
@@ -200,17 +213,38 @@ about it bite:
 Use the `docker inspect` command in 3c rather than `docker compose exec backend
 printenv` for the same reason.
 
-### Without AWS credentials
+## Object storage
 
-`boto3` talks to real AWS; there is no local S3 substitute in `requirements.txt`.
-With `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` unset:
+Figures, and every other uploaded binary, live in S3 rather than the database.
+Local development does not use AWS for this: compose runs **s3proxy**, an
+S3-compatible service that keeps objects in the `s3-data` volume. The credentials
+in `.env.example` are placeholders it ignores, and they cannot be blank only
+because boto3 refuses to sign a request without something there.
 
-- the `/uploads` routes return 500,
-- figures and images cannot be added to a project, and
-- compiling a project that already references a figure fails, because the worker
-  cannot fetch the asset.
+Two endpoints describe one service, and they are not interchangeable:
 
-Editing and compiling text-only documents work fine.
+| Setting | Value | Who uses it |
+|---|---|---|
+| `S3_ENDPOINT_URL` | `http://s3` | the API, over the compose network |
+| `S3_PUBLIC_ENDPOINT_URL` | `http://localhost:9100` | the browser, and what URLs are signed with |
+
+A presigned URL signs its own `Host` header, so an upload URL signed with the
+internal name fails in the browser with `SignatureDoesNotMatch`. The compile
+worker is a third case: it runs on the host, so it needs
+`S3_ENDPOINT_URL=http://localhost:9100` as described in stage 3c.
+
+**Authorization is disabled** on the local service. That is deliberate: the editor
+loads a figure straight from its stored URL with no signature, exactly as a
+public-read bucket behaves in production. The cost is that a presigned URL is
+accepted here no matter how it was signed, so a signing bug will not show up
+locally. Do not run this configuration anywhere but a development machine.
+
+### Pointing at real AWS instead
+
+Put real keys in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, and **set both
+endpoint variables to empty**. Empty means real AWS; leaving them set sends signed
+requests to a service that is not there. With both unset and no keys, boto3 falls
+back to its usual chain, which is how a deployment on an instance role works.
 
 ---
 
