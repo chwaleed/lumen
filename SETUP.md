@@ -113,13 +113,19 @@ container, see *Snap-installed Docker* below.
 
 ### 3b. Install the worker's Python dependencies on the host
 
+The backend container already has these, but that does not help here: the worker is
+a **separate host process**, not that container, and host Python cannot import from
+a container's `site-packages`. Skip this and the worker dies on
+`ModuleNotFoundError: No module named 'sqlmodel'`.
+
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-A virtualenv is optional but keeps these out of your system Python.
+A virtualenv is optional but keeps these out of your system Python. If
+`backend/.venv` already exists, this step has been done; just activate it.
 
 ### 3c. Point the worker at the API's database
 
