@@ -10,3 +10,5 @@ backend/.m2check.db
 # trailing slash is what keeps git from stripping it from the pattern.
 /FYP Documentation /
 /FYP PDFs /
+
+.dev-logs/

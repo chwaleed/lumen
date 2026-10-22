@@ -33,6 +33,7 @@ Then open <http://localhost:3000>. Sign up and you land straight in the dashboar
 - **Compile does not work from the above alone** — the queue has nothing draining it.
   See [SETUP.md](SETUP.md) for the full fresh-machine sequence, including the TeX
   image and the compile worker.
+- Once set up, `./dev.sh` starts all three (containers, worker, frontend) together.
 
 ## Layout
 

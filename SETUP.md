@@ -1,7 +1,24 @@
 # Setup
 
-Run these in order on a fresh machine. Stop at the end of Stage 2 if you only need
-the editor; Stage 3 is what makes the **Compile** button work.
+## Already set up? One command
+
+```bash
+./dev.sh
+```
+
+Containers, the compile worker and the frontend, with their logs in one stream.
+It reclaims ports 3000, 9000 and 9100 first, so a leftover dev server or worker
+from a previous run is stopped rather than fought with, and Ctrl-C shuts the host
+processes down together. Containers keep running; `docker compose down` stops
+those.
+
+It needs `.env`, the TeX image and `backend/.venv` to exist, and tells you which
+one is missing if not. The rest of this file is how those get there.
+
+---
+
+Run the stages below in order on a fresh machine. Stop at the end of Stage 2 if
+you only need the editor; Stage 3 is what makes the **Compile** button work.
 
 `README.md` shows the short version. This file is the one that does not leave
 anything out.
@@ -168,6 +185,18 @@ export S3_ENDPOINT_URL=http://localhost:9100
 Credentials need no override; `Settings` reads those from `.env`.
 
 ### 3d. Run the worker
+
+```bash
+./dev-worker.sh
+```
+
+That derives both values above rather than relying on you to keep them current:
+the container IP changes whenever Postgres is recreated, and the storage endpoint
+differs inside and outside the compose network. It also checks the TeX image and
+the virtualenv exist, and refuses to start with a specific message when the
+Snap/`no-new-privileges` combination below would break every build.
+
+By hand, if you prefer:
 
 ```bash
 cd backend
