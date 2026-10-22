@@ -134,6 +134,21 @@ worker_pid=$(start_in_group "$WORKER_LOG" ./dev-worker.sh)
 sleep 4
 kill -0 "$worker_pid" 2>/dev/null || { cat "$WORKER_LOG"; fail "the worker exited at startup -- see above"; }
 
+# Turbopack keeps its dev state under .next/dev and reuses it across restarts.
+# Started cold against an existing one, the router has come up with only part of
+# the route tree: everything at five path segments or fewer resolved and anything
+# deeper -- compile/<job>/pdf, files/<id>/raw -- fell through to the app's
+# not-found page. A 404 in HTML from a route whose file is right there, which
+# reads as a broken feature rather than a stale cache. Touching any route file
+# makes the server rescan and they all reappear, so the tree is recoverable; it
+# just is not rebuilt on its own.
+#
+# Only .next/dev goes: a production build in .next/build is left alone.
+if [ -d frontend/.next/dev ]; then
+  say "clearing the Turbopack dev cache (keeps route discovery honest)"
+  rm -rf frontend/.next/dev
+fi
+
 say "starting frontend"
 web_pid=$(start_in_group "$WEB_LOG" bash -c 'cd frontend && exec bun dev')
 
